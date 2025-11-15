@@ -1,0 +1,156 @@
+version: '3.8'
+
+services:
+  # MongoDB for Orion-LD
+  mongodb:
+    image: mongo:4.4
+    container_name: mongodb
+    command: --bind_ip_all
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - floodwatch-net
+    healthcheck:
+      test: [ "CMD", "mongo", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Orion-LD Context Broker
+  orion-ld:
+    image: fiware/orion-ld:latest
+    container_name: orion-ld
+    hostname: orion-ld
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "1026:1026"
+    command: -logLevel INFO -noCache -dbhost mongodb
+    networks:
+      - floodwatch-net
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:1026/version" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # CrateDB: Time-series + Geo-spatial database
+  cratedb:
+    image: crate:5.4.6
+    container_name: cratedb
+    ports:
+      - "4200:4200" # HTTP
+      - "5432:5432" # PostgreSQL wire
+    environment:
+      - CRATE_HEAP_SIZE=1g
+    networks:
+      - floodwatch-net
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:4200" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # QuantumLeap: subscribe Orion-LD -> CrateDB
+  quantumleap:
+    image: orchestracities/quantumleap:latest
+    container_name: quantumleap
+    depends_on:
+      orion-ld:
+        condition: service_healthy
+      cratedb:
+        condition: service_healthy
+    ports:
+      - "8668:8668"
+    environment:
+      - CRATE_HOST=cratedb
+      - CRATE_PORT=5432
+      - CRATE_USER=crate
+      - CRATE_PASSWORD=
+      - ORION_URL=http://orion-ld:1026
+      - LOG_LEVEL=INFO
+    networks:
+      - floodwatch-net
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8668/version" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Grafana dashboard
+  grafana:
+    image: grafana/grafana:9.3.2
+    container_name: grafana
+    depends_on:
+      cratedb:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    volumes:
+      - ./dashboard/grafana/provisioning:/etc/grafana/provisioning
+      - grafana-storage:/var/lib/grafana
+    networks:
+      - floodwatch-net
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Simulation service
+  simulator:
+    image: python:3.10-slim
+    container_name: simulator
+    working_dir: /app
+    volumes:
+      - ./simulation:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ORION_URL=http://orion-ld:1026
+      - QUANTUMLEAP_URL=http://quantumleap:8668
+    command: bash -c "pip install --no-cache-dir -r requirements.txt && python run_all_simulators.py"
+    depends_on:
+      orion-ld:
+        condition: service_healthy
+      quantumleap:
+        condition: service_healthy
+    networks:
+      - floodwatch-net
+    restart: unless-stopped
+
+  # Processor service
+  processor:
+    image: python:3.10-slim
+    container_name: processor
+    working_dir: /app
+    volumes:
+      - ./processor:/app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - ORION_URL=http://orion-ld:1026
+      - QUANTUMLEAP_URL=http://quantumleap:8668
+    command: bash -c "pip install --no-cache-dir -r requirements.txt && python run_processor.py"
+    depends_on:
+      orion-ld:
+        condition: service_healthy
+      quantumleap:
+        condition: service_healthy
+    networks:
+      - floodwatch-net
+    restart: unless-stopped
+
+networks:
+  floodwatch-net:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  grafana-storage:
