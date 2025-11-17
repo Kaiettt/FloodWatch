@@ -1,0 +1,16 @@
+{
+  "id": "urn:ngsi-ld:Location:LOC-001",
+  "type": "Location",
+  "name": { "type": "Property", "value": "Quan 1 - Sample" },
+  "area": {
+    "type": "GeoProperty",
+    "value": {
+      "type": "Polygon",
+      "coordinates": [[[106.6815,10.7615],[106.6825,10.7615],[106.6825,10.7625],[106.6815,10.7625],[106.6815,10.7615]]]
+    }
+  },
+  "hasSensor": { "type": "Relationship", "object": "urn:ngsi-ld:WaterLevelSensor:WLS-001" },
+  "hasObservation": { "type": "Relationship", "object": "urn:ngsi-ld:FloodObservation:FO-20251114-001" },
+  "hasRisk": { "type": "Relationship", "object": "urn:ngsi-ld:FloodRisk:FR-Q1-001" },
+  "@context": ["https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"]
+}
