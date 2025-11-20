@@ -26,9 +26,9 @@ class WaterLevelSimulator:
         self.update_interval = update_interval
         self.running = False
         self.sensors = self._initialize_sensors()
-        self.orion_url = "http://orion-ld:1026/ngsi-ld/v1/"
+        self.orion_url = "http://localhost:1026/ngsi-ld/v1/"
         self.headers = {
-            "Content-Type": "application/ld+json",
+            "Content-Type": "application/json",
             "Link": '<https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.6.jsonld>; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"'
         }
     
@@ -115,10 +115,7 @@ class WaterLevelSimulator:
                     "status": {
                         "type": "Property",
                         "value": "initializing"
-                    },
-                    "@context": [
-                        "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.6.jsonld"
-                    ]
+                    }
                 }
                 
                 async with session.post(
@@ -216,3 +213,16 @@ class WaterLevelSimulator:
         """Stop the simulation."""
         self.running = False
         logger.info("Stopping water level sensor simulation...")
+
+if __name__ == "__main__":
+    import logging
+    import asyncio
+
+    logging.basicConfig(level=logging.INFO)
+
+    sim = WaterLevelSimulator(update_interval=10)
+
+    try:
+        asyncio.run(sim.start())
+    except KeyboardInterrupt:
+        asyncio.run(sim.stop())
