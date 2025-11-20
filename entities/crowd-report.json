@@ -1,12 +1,47 @@
 {
   "id": "urn:ngsi-ld:CrowdReport:CR-20251114-001",
   "type": "CrowdReport",
-  "reporterId": { "type": "Property", "value": "user123" },
-  "description": { "type": "Property", "value": "Ngập trên đường Nguyễn Huệ, khoảng 20cm" },
-  "photoUrl": { "type": "Property", "value": "" },
-  "timestamp": { "type": "Property", "value": "2025-11-14T09:52:00Z" },
-  "verified": { "type": "Property", "value": true },
-  "locatedAt": { "type": "Relationship", "object": "urn:ngsi-ld:Location:LOC-001" },
-  "contributesTo": { "type": "Relationship", "object": "urn:ngsi-ld:FloodObservation:FO-20251114-001" },
-  "@context": ["https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"]
+  "reporterId": {
+    "type": "Property",
+    "value": "user123"
+  },
+  "description": {
+    "type": "Property",
+    "value": "Ngập trên đường Nguyễn Huệ, khoảng 20cm"
+  },
+  "photos": {
+    "type": "Property",
+    "value": [
+      "http://localhost:8000/static/uploads/07a186616fe3427c997da25a2d44b9fe.png"
+    ]
+  },
+  "timestamp": {
+    "type": "Property",
+    "value": "2025-11-14T09:52:00Z"
+  },
+  "verified": {
+    "type": "Property",
+    "value": true
+  },
+  "locatedAt": {
+    "type": "Relationship",
+    "object": "urn:ngsi-ld:Location:LOC-001"
+  },
+  "contributesTo": {
+    "type": "Relationship",
+    "object": "urn:ngsi-ld:FloodObservation:FO-20251114-001"
+  },
+  "location": {
+    "type": "GeoProperty",
+    "value": {
+      "type": "Point",
+      "coordinates": [
+        105.8404,
+        21.0249
+      ]
+    }
+  },
+  "@context": [
+    "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"
+  ]
 }

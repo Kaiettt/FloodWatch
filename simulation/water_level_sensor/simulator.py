@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class WaterLevelReading:
     """Represents a single water level reading."""
     value: float  # in meters
-    timestamp: str
+    timestamp: strqqqqqqqqqqqqq
     location: Dict[str, float]  # {latitude, longitude}
     sensor_id: str
     status: str = "ok"
