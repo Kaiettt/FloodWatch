@@ -9,19 +9,14 @@
     "type": "Property",
     "value": "Ngập trên đường Nguyễn Huệ, khoảng 20cm"
   },
-  "photos": {
+  "waterHeight": {
     "type": "Property",
-    "value": [
-      "http://localhost:8000/static/uploads/07a186616fe3427c997da25a2d44b9fe.png"
-    ]
+    "value": 0.2,
+    "unitCode": "MTR"
   },
   "timestamp": {
     "type": "Property",
     "value": "2025-11-14T09:52:00Z"
-  },
-  "verified": {
-    "type": "Property",
-    "value": true
   },
   "locatedAt": {
     "type": "Relationship",
