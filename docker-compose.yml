@@ -70,12 +70,45 @@ services:
       - CRATE_PORT=5432
       - CRATE_USER=crate
       - CRATE_PASSWORD=
+      - CRATE_DB=quantumleap
       - ORION_URL=http://orion-ld:1026
-      - LOG_LEVEL=INFO
+      - LOG_LEVEL=DEBUG
+      - QL_CONFIG=/etc/quantumleap/quantumleap.conf
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_KEY_PREFIX=ql
+      - REDIS_REPLY_TIMEOUT=5
+      - REDIS_RETRY_ON_TIMEOUT=true
+      - REDIS_SOCKET_TIMEOUT=5
+      - REDIS_CONNECT_TIMEOUT=5
+      - LOG_HANDLERS=console,file
+      - LOG_FILE=/var/log/quantumleap/quantumleap.log
+      - LOG_FILE_MAX_SIZE=10485760 # 10MB
+      - LOG_FILE_BACKUP_COUNT=5
+    volumes:
+      - ./quantumleap/quantumleap.conf:/etc/quantumleap/quantumleap.conf
+      - quantumleap-logs:/var/log/quantumleap
     networks:
       - floodwatch-net
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8668/version" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Redis for QuantumLeap caching
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - floodwatch-net
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -154,3 +187,5 @@ networks:
 volumes:
   mongodb_data:
   grafana-storage:
+  quantumleap-logs:
+  redis-data:

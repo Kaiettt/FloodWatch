@@ -25,6 +25,7 @@ wheels/
 venv/
 env/
 ENV/
+.venv/
 
 # IDE
 .idea/
@@ -44,6 +45,7 @@ logs/
 # Local development
 *.local
 
+.pt
 # Database
 *.db
 *.sqlite3
