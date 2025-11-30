@@ -45,6 +45,7 @@ logs/
 # Local development
 *.local
 
+.pt
 # Database
 *.db
 *.sqlite3
