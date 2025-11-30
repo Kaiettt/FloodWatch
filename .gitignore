@@ -59,7 +59,6 @@ processor/alerting/alert_logs/
 # ======================
 # Frontend / Node
 # ======================
-
 # Node modules
 node_modules/
 

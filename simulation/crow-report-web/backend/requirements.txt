@@ -4,7 +4,3 @@ python-multipart
 pydantic
 requests
 python-dotenv
-slowapi
-Pillow
-imagehash
-GPSPhoto
