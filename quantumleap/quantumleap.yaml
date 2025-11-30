@@ -1,0 +1,36 @@
+quantumleap:
+  orion_url: http://orion-ld:1026
+  
+  # Entity types to be processed
+  entity_types:
+    - CrowdReport
+    - WaterLevelObserved   # <-- change here
+    - CameraStream
+    - FloodRisk
+  
+  # Timestamp attributes for each entity type
+  timestamp_attrs:
+    CrowdReport: timestamp
+    WaterLevelObserved: lastUpdate   # Using lastUpdate to match entity attribute
+    CameraStream: timestamp
+    FloodRisk: timestamp
+  
+  # Geo attributes
+  geo_attrs:
+    - location
+  
+  # CrateDB configuration
+  crate:
+    host: cratedb
+    port: 4200  # Using HTTP API port for CrateDB 5.x
+    user: crate
+    password: ""
+    db: quantumleap
+  
+  # Logging configuration
+  log:
+    level: DEBUG
+    file: /var/log/quantumleap/quantumleap.log
+    handlers: [console, file]
+    file_max_size: 10485760
+    file_backup_count: 5
