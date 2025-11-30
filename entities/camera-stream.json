@@ -3,13 +3,35 @@
   "type": "CameraStream",
   "location": {
     "type": "GeoProperty",
-    "value": { "type": "Point", "coordinates": [106.682, 10.762] }
+    "value": {
+      "type": "Point",
+      "coordinates": [
+        106.682,
+        10.762
+      ]
+    }
   },
-  "streamUrl": { "type": "Property", "value": "rtsp://cam-q1-001/stream" },
-  "floodDetected": { "type": "Property", "value": false },
-  "confidence": { "type": "Property", "value": 0.0 },
-  "lastUpdate": { "type": "Property", "value": "2025-11-14T09:53:00Z" },
-  "monitors": { "type": "Relationship", "object": "urn:ngsi-ld:Location:LOC-001" },
-  "generates": { "type": "Relationship", "object": "urn:ngsi-ld:FloodObservation:FO-20251114-001" },
-  "@context": ["https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"]
+  "streamUrl": {
+    "type": "Property",
+    "value": "rtsp://cam-q1-001/stream"
+  },
+  "confidence": {
+    "type": "Property",
+    "value": 0.0
+  },
+  "lastUpdate": {
+    "type": "Property",
+    "value": "2025-11-14T09:53:00Z"
+  },
+  "monitors": {
+    "type": "Relationship",
+    "object": "urn:ngsi-ld:Location:LOC-001"
+  },
+  "generates": {
+    "type": "Relationship",
+    "object": "urn:ngsi-ld:FloodObservation:FO-20251114-001"
+  },
+  "@context": [
+    "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"
+  ]
 }

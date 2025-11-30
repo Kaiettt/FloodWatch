@@ -25,6 +25,7 @@ wheels/
 venv/
 env/
 ENV/
+.venv/
 
 # IDE
 .idea/
@@ -57,6 +58,7 @@ processor/alerting/alert_logs/
 # ======================
 # Frontend / Node
 # ======================
+
 # Node modules
 node_modules/
 

@@ -1,40 +1,39 @@
 {
-  "id": "urn:ngsi-ld:CrowdReport:CR-20251114-001",
+  "id": "urn:ngsi-ld:CrowdReport:ec200e163f954dfc97e9f827d4343b63",
   "type": "CrowdReport",
   "reporterId": {
     "type": "Property",
-    "value": "user123"
+    "value": "uuid"
   },
   "description": {
     "type": "Property",
-    "value": "Ngập trên đường Nguyễn Huệ, khoảng 20cm"
-  },
-  "waterHeight": {
-    "type": "Property",
-    "value": 0.2,
-    "unitCode": "MTR"
+    "value": "Flooding on Main Street"
   },
   "timestamp": {
     "type": "Property",
-    "value": "2025-11-14T09:52:00Z"
-  },
-  "locatedAt": {
-    "type": "Relationship",
-    "object": "urn:ngsi-ld:Location:LOC-001"
-  },
-  "contributesTo": {
-    "type": "Relationship",
-    "object": "urn:ngsi-ld:FloodObservation:FO-20251114-001"
+    "value": "2025-11-20T08:45:39.945500Z"
   },
   "location": {
     "type": "GeoProperty",
     "value": {
       "type": "Point",
       "coordinates": [
-        105.8404,
-        21.0249
+        106.5678,
+        10.1234
       ]
     }
+  },
+  "waterHeight": {
+    "type": "Property",
+    "value": 0.5,
+    "unitCode": "MTR"
+  },
+  "photos": {
+    "type": "Property",
+    "value": [
+      "http://example.com/photo1.jpg",
+      "http://example.com/photo2.jpg"
+    ]
   },
   "@context": [
     "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"
