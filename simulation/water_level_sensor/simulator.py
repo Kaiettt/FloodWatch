@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class WaterLevelReading:
     """Represents a single water level reading."""
     value: float  # in meters
-    timestamp: strqqqqqqqqqqqqq
+    timestamp: str
     location: Dict[str, float]  # {latitude, longitude}
     sensor_id: str
     status: str = "ok"
@@ -35,7 +35,7 @@ class WaterLevelSimulator:
     def _initialize_sensors(self) -> Dict[str, Dict[str, Any]]:
         """Initialize simulated sensors with their locations."""
         return {
-            "sensor-001": {
+            "sensor-0021": {
                 "location": {
                     "type": "Point",
                     "coordinates": [106.7, 10.7]  # Longitude, Latitude
@@ -44,7 +44,7 @@ class WaterLevelSimulator:
                 "variation_range": 0.5,  # Max variation from base level
                 "alert_threshold": 3.0  # Water level that triggers alerts
             },
-            "sensor-002": {
+            "sensor-0020": {
                 "location": {
                     "type": "Point",
                     "coordinates": [106.71, 10.69]
