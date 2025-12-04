@@ -53,6 +53,7 @@ logs/
 # Project specific
 simulation/water_level_sensor/data/
 simulation/camera_stream/videos/
+simulation/crow-report-web/backend/app/models/*.pt
 dashboard/grafana/grafana.ini
 processor/alerting/alert_logs/
 
