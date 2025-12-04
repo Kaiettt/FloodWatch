@@ -1,0 +1,46 @@
+{
+    "id": "urn:ngsi-ld:FloodRiskCrowd:<uuid>",
+    "type": "FloodRiskCrowd",
+    "location": {
+        "type": "GeoProperty",
+        "value": {
+            "type": "Point",
+            "coordinates": [
+                105.84117,
+                21.0245
+            ]
+        }
+    },
+    "severity": {
+        "type": "Property",
+        "value": "Medium"
+    },
+    "crowdDepth": {
+        "type": "Property",
+        "value": 0.20,
+        "unitCode": "MTR"
+    },
+    "confidence": {
+        "type": "Property",
+        "value": "Medium"
+    },
+    "sourceCrowd": {
+        "type": "Relationship",
+        "object": "urn:ngsi-ld:CrowdReport:<uuid>"
+    },
+    "timestamp": {
+        "type": "Property",
+        "value": "2025-01-18T12:23:11Z"
+    },
+    "verified": {
+        "type": "Property",
+        "value": false
+    },
+    "updatedAt": {
+        "type": "Property",
+        "value": "2025-01-18T12:25:00Z"
+    },
+    "@context": [
+        "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"
+    ]
+}

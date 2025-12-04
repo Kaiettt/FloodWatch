@@ -1,0 +1,44 @@
+.container {
+  max-width: 600px;
+  margin: 20px auto;
+  padding: 15px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  font-family: Arial, sans-serif;
+}
+
+label {
+  display: block;
+  margin-top: 10px;
+  font-weight: bold;
+}
+
+textarea, input[type="text"], input[type="file"] {
+  width: 100%;
+  margin-top: 5px;
+  padding: 8px;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+}
+
+button {
+  padding: 10px 15px;
+  margin-top: 15px;
+  border: none;
+  background-color: #0078ff;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:disabled {
+  background-color: #aaa;
+  cursor: not-allowed;
+}
+
+.status-box {
+  margin-top: 15px;
+  padding: 10px;
+  background: #f2f2f2;
+  border-left: 3px solid #0078ff;
+}

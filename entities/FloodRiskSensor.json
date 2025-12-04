@@ -1,0 +1,44 @@
+{
+  "id": "urn:ngsi-ld:FloodRiskSensor:sensor-0021",
+  "type": "FloodRiskSensor",
+  "location": {
+    "type": "GeoProperty",
+    "value": {
+      "type": "Point",
+      "coordinates": [
+        106.7,
+        10.7
+      ]
+    }
+  },
+  "severity": {
+    "type": "Property",
+    "value": "Severe"
+  },
+  "waterLevel": {
+    "type": "Property",
+    "value": 2.07,
+    "unitCode": "MTR",
+    "observedAt": "2025-11-30T09:39:28Z"
+  },
+  "alertThreshold": {
+    "type": "Property",
+    "value": 3,
+    "unitCode": "MTR"
+  },
+  "confidence": {
+    "type": "Property",
+    "value": "High"
+  },
+  "sourceSensor": {
+    "type": "Relationship",
+    "object": "urn:ngsi-ld:WaterLevelObserved:sensor-0021"
+  },
+  "updatedAt": {
+    "type": "Property",
+    "value": "2025-11-30T09:40:00Z"
+  },
+  "@context": [
+    "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.6.jsonld"
+  ]
+}

@@ -1,5 +1,5 @@
 {
-  "id": "urn:ngsi-ld:CrowdReport:ec200e163f954dfc97e9f827d4343b63",
+  "id": "urn:ngsi-ld:CrowdReport:<uuid>",
   "type": "CrowdReport",
   "reporterId": {
     "type": "Property",
@@ -12,32 +12,24 @@
   "photos": {
     "type": "Property",
     "value": [
-      "http://localhost:8000/static/uploads/07a186616fe3427c997da25a2d44b9fe.png"
+      "http://localhost:8000/static/uploads/example.png"
     ]
   },
   "timestamp": {
     "type": "Property",
-    "value": "2025-11-14T09:52:00Z"
+    "value": "2025-01-18T12:23:11Z"
   },
   "verified": {
     "type": "Property",
-    "value": true
-  },
-  "locatedAt": {
-    "type": "Relationship",
-    "object": "urn:ngsi-ld:Location:LOC-001"
-  },
-  "contributesTo": {
-    "type": "Relationship",
-    "object": "urn:ngsi-ld:FloodObservation:FO-20251114-001"
+    "value": false
   },
   "location": {
     "type": "GeoProperty",
     "value": {
       "type": "Point",
       "coordinates": [
-        105.8404,
-        21.0249
+        105.84117,
+        21.0245
       ]
     }
   },

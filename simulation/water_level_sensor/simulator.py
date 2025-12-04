@@ -35,7 +35,7 @@ class WaterLevelSimulator:
     def _initialize_sensors(self) -> Dict[str, Dict[str, Any]]:
         """Initialize simulated sensors with their locations."""
         return {
-            "sensor-0021": {
+            "sensor-0029": {
                 "location": {
                     "type": "Point",
                     "coordinates": [106.7, 10.7]  # Longitude, Latitude
@@ -44,7 +44,7 @@ class WaterLevelSimulator:
                 "variation_range": 0.5,  # Max variation from base level
                 "alert_threshold": 3.0  # Water level that triggers alerts
             },
-            "sensor-0020": {
+            "sensor-0030": {
                 "location": {
                     "type": "Point",
                     "coordinates": [106.71, 10.69]

@@ -1,0 +1,39 @@
+{
+    "id": "urn:ngsi-ld:WeatherObserved:HoChiMinh_District1",
+    "type": "WeatherObserved",
+    "location": {
+        "type": "GeoProperty",
+        "value": {
+            "type": "Point",
+            "coordinates": [
+                106.70098,
+                10.77653
+            ]
+        }
+    },
+    "temperature": {
+        "type": "Property",
+        "value": 29.5
+    },
+    "humidity": {
+        "type": "Property",
+        "value": 83
+    },
+    "pressure": {
+        "type": "Property",
+        "value": 1004
+    },
+    "windSpeed": {
+        "type": "Property",
+        "value": 3.4
+    },
+    "rainLevel": {
+        "type": "Property",
+        "value": 2.1
+    },
+    "dateObserved": {
+        "type": "Property",
+        "value": "2025-12-04T08:00:00Z"
+    },
+    "@context": "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.6.jsonld"
+}

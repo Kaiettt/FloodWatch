@@ -4,16 +4,18 @@ quantumleap:
   # Entity types to be processed
   entity_types:
     - CrowdReport
-    - WaterLevelObserved   # <-- change here
+    - WaterLevelObserved
     - CameraStream
-    - FloodRisk
+    - FloodRiskSensor        # <-- added
+    - FloodRiskCrowd         # <-- added
   
   # Timestamp attributes for each entity type
   timestamp_attrs:
     CrowdReport: timestamp
-    WaterLevelObserved: lastUpdate   # Using lastUpdate to match entity attribute
-    CameraStream: timestamp
-    FloodRisk: timestamp
+    WaterLevelObserved: lastUpdate
+    CameraStream: lastUpdate
+    FloodRiskSensor: updatedAt      # <-- sensors send updatedAt
+    FloodRiskCrowd: timestamp       # <-- crowd reports send timestamp
   
   # Geo attributes
   geo_attrs:
@@ -22,7 +24,7 @@ quantumleap:
   # CrateDB configuration
   crate:
     host: cratedb
-    port: 4200  # Using HTTP API port for CrateDB 5.x
+    port: 4200
     user: crate
     password: ""
     db: quantumleap
