@@ -1,18 +1,24 @@
 import requests
 
-# Orion-LD URL
+# Orion-LD endpoint
 ORION_URL = "http://localhost:1026/ngsi-ld/v1/subscriptions"
+
 # QuantumLeap notification endpoint
 QL_NOTIFY_URL = "http://quantumleap:8668/v2/notify"
 
-# Define subscriptions for each entity with correct attributes
+# NGSI-LD core context v1.6 (requested)
+CONTEXT = [
+    "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.6.jsonld"
+]
+
+# Subscriptions definition
 subscriptions = [
     {
         "name": "sub-CrowdReport",
         "entity_type": "CrowdReport",
         "attributes": [
-            "reporterId", "description", "photos", "timestamp",
-            "verified", "locatedAt", "contributesTo", "location"
+            "reporterId", "description", "photos", "timestamp","water_level",
+            "verified", "location"
         ]
     },
     {
@@ -42,32 +48,35 @@ subscriptions = [
         "name": "sub-FloodRiskCrowd",
         "entity_type": "FloodRiskCrowd",
         "attributes": [
-            "severity", "crowdDepth", "confidence",
-            "sourceCrowd", "location", "timestamp", "updatedAt"
+            "riskScore", "riskLevel", "waterLevel", "location",
+            "calculatedAt", "factors"
         ]
-    }
+    },
 ]
+
+headers = {"Content-Type": "application/ld+json"}
 
 # Create subscriptions
 for sub in subscriptions:
     payload = {
         "type": "Subscription",
-        "name": sub["name"],
+        "status": "active",
         "entities": [{"type": sub["entity_type"]}],
         "notification": {
             "endpoint": {
                 "uri": QL_NOTIFY_URL,
                 "accept": "application/ld+json"
             },
-            "attributes": sub["attributes"],
-            "format": "normalized"
+            "attributes": sub["attributes"]
         },
-        "isActive": True
+        "name": sub["name"],
+        "@context": CONTEXT
     }
 
-    response = requests.post(ORION_URL, json=payload)
+    response = requests.post(ORION_URL, json=payload, headers=headers)
 
     if response.status_code in [200, 201]:
         print(f"Subscription created: {sub['name']}")
     else:
-        print(f"Failed to create subscription {sub['name']}: {response.status_code}, {response.text}")
+        print(f"Failed to create subscription {sub['name']}: {response.status_code}")
+        print(response.text)

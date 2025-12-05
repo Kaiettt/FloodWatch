@@ -1,17 +1,20 @@
 # ======================================================
-# Crowdsensing Flood Backend - FIXED VERSION
+# Crowdsensing Flood Backend - UPDATED VERSION
 # ======================================================
 
 import os
 import uuid
-import datetime
-import requests
-import httpx
-import re
-from typing import List, Optional
+import logging
 import json
+from datetime import datetime, timezone
+from typing import List, Optional, Dict, Any
 
-from fastapi import FastAPI, UploadFile, Form, File, HTTPException, Request
+import asyncio
+import asyncpg
+import json
+import requests
+from crate import client
+from fastapi import FastAPI, UploadFile, Form, File, HTTPException, Request, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
@@ -20,205 +23,359 @@ from .services.storage import save_files_local
 from .services.orion_client import create_crowd_report_entity
 from .schemas import CreateReportResult
 
+# ======================================================
+# INIT + CONFIG
+# ======================================================
+
 load_dotenv()
 
-# ==========================
-# CONFIG
-# ==========================
-
-BASE_URL = os.getenv("BASE_URL")
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
-
-ORION_ENTITIES = os.getenv(
-    "ORION_ENTITIES",
-    "http://localhost:1026/ngsi-ld/v1/entities"
+# Configure logging with proper encoding
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("flood_processor.log", encoding='utf-8')
+    ]
 )
-
-NGSI_CONTEXT = "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"
-
-# ==========================
-# FastAPI Init
-# ==========================
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+# CORS
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
+# Static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
+# Orion-LD config
+ORION_LD_URL = os.getenv("ORION_ENTITIES", "http://orion-ld:1026/ngsi-ld/v1/entities")
+CONTEXT = "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.6.jsonld"
+BASE_URL = os.getenv("BASE_URL")
+
+# CrateDB connection config (env)
+# Using container name 'cratedb' and default database 'doc' for asyncpg
+# In production, set CRATEDB_DSN in environment variables
+CRATEDB_DSN = os.getenv(
+    "CRATEDB_DSN",
+    "postgresql://crate@cratedb:5432/quantumleap"
+)
+
+# CrateDB configuration
+CRATEDB_HTTP_URL = os.getenv("CRATEDB_HTTP_URL", "http://cratedb:4200")
+CRATEDB_USER = os.getenv("CRATEDB_USER", "crate")
+
 
 # ======================================================
-# ENDPOINT 1: WaterLevelObserved → FloodRiskSensor
+# UTILITIES
 # ======================================================
+
+def now_iso() -> str:
+    """Get current UTC time in ISO format."""
+    return datetime.now(timezone.utc).isoformat()
+
+def validate_location(location: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and normalize location data structure."""
+    if not isinstance(location, dict):
+        return None
+        
+    # If it's already a GeoProperty, return as is
+    if location.get("type") == "GeoProperty":
+        return location
+        
+    # If it's a direct value, wrap it in GeoProperty
+    if "type" in location and "coordinates" in location:
+        return {
+            "type": "GeoProperty",
+            "value": location
+        }
+    return None
+
+def severity_from_level(level: float, threshold: float) -> str:
+    """Determine severity level based on water level and threshold."""
+    if level is None:
+        return "Unknown"
+    if level >= threshold:
+        return "Severe"
+    if level >= threshold * 0.7:
+        return "Medium"
+    return "Low"
+
+
+def compute_flood_severity(water_level: float, threshold: float, trend: float | None = None) -> str:
+    """
+    Compute flood risk severity using a more realistic multi-factor model:
+    - delta: how much water level exceeds threshold
+    - trend: rate of increasing water (optional)
+    """
+
+    if threshold <= 0:
+        threshold = 3.0  # fallback safe default
+
+    delta = water_level - threshold
+
+    # --- Base severity purely from delta ---
+    if delta < 0:
+        base_severity = "Low"
+    elif 0 <= delta < threshold * 0.3:
+        base_severity = "Moderate"
+    elif threshold * 0.3 <= delta < threshold * 0.8:
+        base_severity = "High"
+    else:
+        base_severity = "Severe"
+
+    # --- Trend adjustment ---
+    # trend > 0 means water is rising
+    if trend is not None:
+        if trend > 0.15:  # fast increase
+            if base_severity in ["Low", "Moderate"]:
+                base_severity = "High"
+        elif trend > 0.05:  # slow increase
+            if base_severity == "Low":
+                base_severity = "Moderate"
+
+    return base_severity
+
+
+
 # ======================================================
-# ENDPOINT 1: WaterLevelObserved → FloodRiskSensor
+# 1. SENSOR ROUTE → FloodRiskSensor
 # ======================================================
 @app.post("/flood/sensor")
-async def process_sensor(request: Request):
-    print("\n================ SENSOR NOTIFICATION RECEIVED ================")
-
+async def process_flood_sensor(request: Request):
     try:
-        body = await request.json()
-        print("RAW BODY:", body)
-        data = body["data"][0]
-    except Exception as e:
-        print("❌ ERROR parsing request:", e)
-        raise HTTPException(400, f"Invalid NGSI-LD payload: {e}")
+        raw = await request.json()
+        logger.info(f"Received sensor data: {json.dumps(raw, indent=2)}")
 
-    try:
-        water_level = data["waterLevel"]["value"]
-        sensor_id = data["id"]
-        alert_threshold = data.get("alertThreshold", {}).get("value", 0.3)
-        coordinates = data["location"]["value"]["coordinates"]
-    except Exception as e:
-        print("❌ ERROR extracting fields:", e)
-        raise HTTPException(400, f"Missing field in sensor data: {e}")
+        # -------- FIX: Unwrap NGSI-LD Notification --------
+        if "data" not in raw or len(raw["data"]) == 0:
+            raise HTTPException(400, "Invalid NGSI-LD notification format: missing data[]")
 
-    print(f"Water level = {water_level}, Sensor = {sensor_id}, Coord = {coordinates}")
+        data = raw["data"][0]   # REAL entity from Fiware
+        # ---------------------------------------------------
 
-    # === severity rules ===
-    if water_level >= 1.5:
-        severity = "Severe"
-    elif water_level >= 0.5:
-        severity = "High"
-    elif water_level >= 0.2:
-        severity = "Medium"
-    else:
-        severity = "Low"
+        water_level = data.get("waterLevel", {}).get("value")
+        threshold = data.get("alertThreshold", {}).get("value", 3.0)
+        location = validate_location(data.get("location", {}))
+        source_id = data.get("id")
 
-    alert = "ThresholdExceeded" if water_level >= alert_threshold else "Normal"
-
-    flood_id = f"urn:ngsi-ld:FloodRiskSensor:{sensor_id.split(':')[-1]}"
-
-    payload = {
-        "id": flood_id,
-        "type": "FloodRiskSensor",
-        "severity": {"type": "Property", "value": severity},
-        "alert": {"type": "Property", "value": alert},
-        "waterLevel": {"type": "Property", "value": water_level},
-        "confidence": {"type": "Property", "value": "High"},
-        "sourceSensor": {"type": "Relationship", "object": sensor_id},
-        "location": {
-            "type": "GeoProperty",
-            "value": {"type": "Point", "coordinates": coordinates}
-        },
-        "updatedAt": {
-            "type": "Property",
-            "value": datetime.datetime.utcnow().isoformat() + "Z"
-        },
-        "@context": [NGSI_CONTEXT]
-    }
-
-    print("\n=== PATCH FloodRiskSensor Payload ===")
-    print(json.dumps(payload, indent=4, ensure_ascii=False))
-
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.patch(
-                f"{ORION_ENTITIES}/{flood_id}/attrs",
-                json=payload,
-                headers={"Content-Type": "application/ld+json"}
+        if not all([water_level is not None, location, source_id]):
+            raise HTTPException(
+                status_code=400,
+                detail="Missing required fields: waterLevel, location, or id"
             )
-        print("PATCH Status:", resp.status_code)
-        print("PATCH Response:", resp.text)
+
+        # optional: lấy trend nếu entity có đính kèm
+        trend = data.get("waterTrend", {}).get("value")  # cm/hour hoặc m/hour
+
+        severity = compute_flood_severity(water_level, threshold, trend)
+
+
+        entity = {
+            "id": f"urn:ngsi-ld:FloodRiskSensor:{uuid.uuid4()}",
+            "type": "FloodRiskSensor",
+            "location": location,
+            "severity": {"type": "Property", "value": severity},
+            "waterLevel": {
+                "type": "Property",
+                "value": water_level,
+                "unitCode": "MTR",
+                "observedAt": data.get("waterLevel", {}).get("observedAt", now_iso()),
+            },
+            "alertThreshold": {
+                "type": "Property",
+                "value": threshold,
+                "unitCode": "MTR",
+            },
+            "confidence": {"type": "Property", "value": "High"},
+            "sourceSensor": {"type": "Relationship", "object": source_id},
+            "updatedAt": {"type": "Property", "value": now_iso()},
+            "@context": CONTEXT,
+        }
+
+        headers = {"Content-Type": "application/ld+json"}
+        res = requests.post(ORION_LD_URL, json=entity, headers=headers)
+        res.raise_for_status()
+
+        logger.info(f"[FloodRiskSensor] {res.status_code} -> {entity['id']}")
+        return {"status": "success", "entity_id": entity["id"]}
+
     except Exception as e:
-        print("❌ ERROR sending to Orion-LD:", e)
-        raise HTTPException(500, f"Orion-LD error: {e}")
-
-    return {"status": "ok", "entity": flood_id}
-
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        raise HTTPException(500, "Internal server error")
 
 
 # ======================================================
-# ENDPOINT 2: CrowdReport → FloodRiskCrowd
+# 2. CROWD ROUTE → FloodRiskCrowd
 # ======================================================
 @app.post("/flood/crowd")
-async def process_crowd(request: Request):
-    print("\n================ CROWD NOTIFICATION RECEIVED ================")
-
+async def process_flood_crowd(request: Request):
     try:
-        body = await request.json()
-        print("RAW BODY:", body)
-        data = body["data"][0]
-    except Exception as e:
-        print("❌ ERROR parsing request:", e)
-        raise HTTPException(400, f"Invalid NGSI-LD payload: {e}")
+        data = await request.json()
+        logger.info(f"[CrowdReport] Incoming data:\n{json.dumps(data, indent=2)}")
 
-    try:
-        crowd_id = data["id"]
-        description = data.get("description", {}).get("value", "")
-        verified = data.get("verified", {}).get("value", False)
-        timestamp = data.get("timestamp", {}).get("value", datetime.datetime.utcnow().isoformat())
-        coordinates = data["location"]["value"]["coordinates"]
-    except Exception as e:
-        print("❌ ERROR extracting crowd fields:", e)
-        raise HTTPException(400, f"Missing field in crowd data: {e}")
+        # Extract entity from NGSI-LD notification format
+        if "data" in data and isinstance(data["data"], list) and len(data["data"]) > 0:
+            entity = data["data"][0]
+        else:
+            entity = data  # Fallback to direct entity if not in notification format
 
-    print(f"Crowd ID = {crowd_id}, Verified={verified}, Desc='{description}'")
+        # --- Extract required fields from CrowdReport ---
+        source_id = entity.get("id")
+        
+        # Handle waterLevel as NGSI-LD Property
+        water_level_obj = entity.get("waterLevel", {})
+        water_level = water_level_obj.get("value") if isinstance(water_level_obj, dict) else None
+        
+        # Handle other properties
+        verified = entity.get("verified", {}).get("value", False) if isinstance(entity.get("verified"), dict) else entity.get("verified", False)
+        description = entity.get("description", {}).get("value", "") if isinstance(entity.get("description"), dict) else entity.get("description", "")
+        photos = entity.get("photos", {}).get("value", []) if isinstance(entity.get("photos"), dict) else entity.get("photos", [])
+        timestamp = entity.get("timestamp", {}).get("value", now_iso()) if isinstance(entity.get("timestamp"), dict) else entity.get("timestamp", now_iso())
 
-    # Detect depth
-    match = re.search(r"([0-9]+(\.[0-9]+)?)\s*(cm|m)", description, re.IGNORECASE)
-    if match:
-        value = float(match.group(1))
-        unit = match.group(3).lower()
-        depth = value / 100 if unit == "cm" else value
-    else:
-        depth = 0.30 if "ngập nặng" in description else \
-                0.10 if "ngập" in description else 0.00
-
-    severity = "High" if depth >= 0.30 else \
-               "Medium" if depth >= 0.15 else "Low"
-
-    confidence = "High" if verified else "Medium"
-
-    flood_id = f"urn:ngsi-ld:FloodRiskCrowd:{uuid.uuid4()}"
-
-    payload = {
-        "id": flood_id,
-        "type": "FloodRiskCrowd",
-        "severity": {"type": "Property", "value": severity},
-        "crowdDepth": {"type": "Property", "value": depth},
-        "confidence": {"type": "Property", "value": confidence},
-        "sourceCrowd": {"type": "Relationship", "object": crowd_id},
-        "location": {
-            "type": "GeoProperty",
-            "value": {"type": "Point", "coordinates": coordinates}
-        },
-        "timestamp": {"type": "Property", "value": timestamp},
-        "updatedAt": {
-            "type": "Property",
-            "value": datetime.datetime.utcnow().isoformat() + "Z"
-        },
-        "@context": [NGSI_CONTEXT]
-    }
-
-    print("\n=== CREATE FloodRiskCrowd Payload ===")
-    print(json.dumps(payload, indent=4, ensure_ascii=False))
-
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                ORION_ENTITIES,
-                json=payload,
-                headers={"Content-Type": "application/ld+json"}
+        # --- Validate location ---
+        location_data = entity.get("location")
+        if isinstance(location_data, dict) and "value" in location_data:
+            location_data = location_data["value"]
+            
+        location = validate_location(location_data)
+        
+        if not location or not source_id or water_level is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Missing required fields: id, location, or waterLevel"
             )
-        print("POST Status:", resp.status_code)
-        print("POST Response:", resp.text)
+
+        # ----------------------------------------------------
+        #               RISK CALCULATION LOGIC
+        # ----------------------------------------------------
+
+        # Water level → score between 0 - 1
+        water_level_score = min(water_level / 2.0, 1.0)
+
+        # Verified gives higher confidence
+        verified_score = 1.0 if verified else 0.5
+
+        # Simple NLP severity detection based on keywords
+        severity_keywords = ["danger", "strong", "overflow", "stuck", "blocked", "deep"]
+        text_severity_score = (
+            1.0 if any(w in description.lower() for w in severity_keywords)
+            else 0.5 if len(description) > 30
+            else 0.1
+        )
+
+        # Weighted risk score
+        risk_score = round(
+            0.6 * water_level_score +
+            0.3 * verified_score +
+            0.1 * text_severity_score,
+            3
+        )
+
+        # Risk level mapping
+        if risk_score > 0.8:
+            risk_level = "Severe"
+        elif risk_score > 0.6:
+            risk_level = "High"
+        elif risk_score > 0.3:
+            risk_level = "Moderate"
+        else:
+            risk_level = "Low"
+
+        # Crowd confidence label
+        crowd_confidence = "Verified" if verified else "Likely"
+
+        # ----------------------------------------------------
+        #            BUILD FloodRiskCrowd ENTITY
+        # ----------------------------------------------------
+        entity_id = f"urn:ngsi-ld:FloodRiskCrowd:{uuid.uuid4()}"
+
+        entity = {
+            "id": entity_id,
+            "type": "FloodRiskCrowd",
+
+            "riskScore": {
+                "type": "Property",
+                "value": risk_score
+            },
+
+            "riskLevel": {
+                "type": "Property",
+                "value": risk_level
+            },
+
+            "waterLevel": {
+                "type": "Property",
+                "value": water_level,
+                "unitCode": "MTR"
+            },
+
+            "crowdConfidence": {
+                "type": "Property",
+                "value": crowd_confidence
+            },
+
+            "factors": {
+                "type": "Property",
+                "value": {
+                    "waterLevelFactor": round(water_level_score, 3),
+                    "verifiedFactor": verified_score,
+                    "textSeverityFactor": round(text_severity_score, 3)
+                }
+            },
+
+            "sourceReport": {
+                "type": "Relationship",
+                "object": source_id
+            },
+
+            "location": location,
+
+            "calculatedAt": {
+                "type": "Property",
+                "value": now_iso()
+            },
+
+            "@context": CONTEXT
+        }
+
+        # ----------------------------------------------------
+        #              SEND ENTITY TO ORION-LD
+        # ----------------------------------------------------
+        headers = {"Content-Type": "application/ld+json"}
+        res = requests.post(ORION_LD_URL, json=entity, headers=headers)
+        res.raise_for_status()
+
+        logger.info(f"[FloodRiskCrowd] Created entity {entity_id} (Risk={risk_level}, Score={risk_score})")
+
+        return {
+            "status": "success",
+            "entity_id": entity_id,
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "orion_status": res.status_code,
+            "orion_response": res.json() if res.text else None
+        }
+
+    except requests.exceptions.RequestException as e:
+        msg = f"Orion-LD communication error: {str(e)}"
+        logger.error(msg)
+        raise HTTPException(status_code=502, detail=msg)
+
     except Exception as e:
-        print("❌ ERROR sending to Orion-LD:", e)
-        raise HTTPException(500, f"Orion-LD error: {e}")
-
-    return {"status": "ok", "entity": flood_id}
-
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ======================================================
-# ENDPOINT 3: Mobile App Create Report → CrowdReport
+# 3. REPORT ROUTE
 # ======================================================
 @app.post("/report", response_model=CreateReportResult)
 async def report(
@@ -226,31 +383,188 @@ async def report(
     reporterId: str = Form(...),
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
-    locationId: Optional[str] = Form(None),
-    observationId: Optional[str] = Form(None),
-    images: List[UploadFile] = File([])
+    water_level: Optional[float] = Form(None, description="Water level in meters"),
+    images: List[UploadFile] = File([], description="Optional images of the flood"),
 ):
     try:
         image_urls = save_files_local(images, BASE_URL)
-    except Exception as e:
-        raise HTTPException(500, f"Cannot save images: {str(e)}")
-
-    try:
         entity_id = create_crowd_report_entity(
             description=description,
             reporterId=reporterId,
             photo_urls=image_urls,
             lat=latitude,
             lng=longitude,
-            location_id=locationId,
-            observation_id=observationId
+            water_level=water_level
         )
+        return {
+            "id": entity_id,
+            "status": "created",
+            "image_urls": image_urls,
+            "waterLevel": water_level
+        }
     except Exception as e:
-        raise HTTPException(500, f"Orion-LD error: {str(e)}")
+        logger.error(f"Error in report endpoint: {str(e)}", exc_info=True)
 
-    return {"id": entity_id, "status": "created", "image_urls": image_urls}
+# ======================================================
+# 4. REALTIME WEBSOCKET FOR MAP VISUALIZATION
+# ======================================================
+async def ensure_tables_exist():
+    """Ensure required tables exist in CrateDB"""
+    try:
+        conn = client.connect(CRATEDB_HTTP_URL, username=CRATEDB_USER)
+        cursor = conn.cursor()
+
+        # FloodRiskCrowd table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS doc.etfloodriskcrowd (
+            entity_id STRING PRIMARY KEY,
+            location_centroid GEO_POINT,
+            riskscore DOUBLE,
+            risklevel STRING,
+            waterlevel DOUBLE,
+            calculatedat TIMESTAMP
+        ) CLUSTERED INTO 3 SHARDS
+        """)
+
+        # FloodRiskSensor table
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS doc.etfloodrisksensor (
+            entity_id STRING,
+            instanceid STRING,
+            location_centroid GEO_POINT,
+            severity STRING,
+            waterlevel DOUBLE,
+            updatedat TIMESTAMP,
+            PRIMARY KEY (entity_id, instanceid)
+        ) CLUSTERED INTO 3 SHARDS
+        """)
+
+        logger.info("Ensured CrateDB tables exist")
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Error ensuring tables exist: {str(e)}")
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
+
+async def fetch_floodrisk_crowd():
+    try:
+        conn = client.connect(CRATEDB_HTTP_URL, username=CRATEDB_USER)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT 
+                entity_id,
+                entity_type,
+                longitude(location_centroid) AS lng,
+                latitude(location_centroid) AS lat,
+                riskscore,
+                risklevel,
+                waterlevel,
+                calculatedat
+            FROM doc.etfloodriskcrowd
+            ORDER BY calculatedat DESC
+        """)
+        columns = [desc[0] for desc in cursor.description]
+        result = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        cursor.close()
+        conn.close()
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching flood risk crowd data: {str(e)}", exc_info=True)
+        return []
 
 
+
+
+async def fetch_floodrisk_sensor():
+    try:
+        conn = client.connect(CRATEDB_HTTP_URL, username=CRATEDB_USER)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT 
+                t.entity_id,
+                t.entity_type,
+                t.instanceid,
+                longitude(t.location_centroid) AS lng,
+                latitude(t.location_centroid) AS lat,
+                t.severity,
+                t.waterlevel,
+                t.updatedat
+            FROM doc.etfloodrisksensor t
+            INNER JOIN (
+                SELECT instanceid, MAX(updatedat) AS last_update
+                FROM doc.etfloodrisksensor
+                GROUP BY instanceid
+            ) sub
+            ON t.instanceid = sub.instanceid AND t.updatedat = sub.last_update
+        """)
+        columns = [desc[0] for desc in cursor.description]
+        result = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        cursor.close()
+        conn.close()
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching flood risk sensor data: {str(e)}", exc_info=True)
+        return []
+
+
+
+
+
+@app.websocket("/ws/map")
+async def websocket_map(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            try:
+                crowd_data = await fetch_floodrisk_crowd()
+                sensor_data = await fetch_floodrisk_sensor()
+                payload = {
+                    "crowd": crowd_data,
+                    "sensor": sensor_data,
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+                await websocket.send_text(json.dumps(payload, default=str))
+            except Exception as e:
+                logger.error(f"Error in WebSocket loop: {str(e)}")
+                await websocket.send_text(json.dumps({
+                    "error": "Failed to fetch data",
+                    "details": str(e)
+                }))
+            await asyncio.sleep(5)
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected")
+    finally:
+        try:
+            await websocket.close()
+        except:
+            pass
+
+
+# ======================================================
+# ROOT CHECK
+# ======================================================
 @app.get("/")
 def root():
-    return {"message": "CrowdReport API OK"}
+    return {"message": "FloodWatchX API Service", "status": "operational"}
+
+# Health check endpoint
+@app.get("/health")
+def health_check():
+    try:
+        # Test Orion connection
+        response = requests.get(f"{ORION_LD_URL}?limit=1", timeout=5)
+        response.raise_for_status()
+        return {
+            "status": "healthy",
+            "orion_ld": "connected" if response.ok else "disconnected",
+            "timestamp": now_iso()
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Service unavailable"
+        )

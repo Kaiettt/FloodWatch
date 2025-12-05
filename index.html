@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Flood Risk WebSocket Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        #output {
+            white-space: pre-wrap;
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>WebSocket Flood Risk Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="output"></div>
+
+    <script>
+        const wsUrl = `ws://${window.location.hostname}:8000/ws/map`; // adjust port if needed
+        const statusEl = document.getElementById("status");
+        const outputEl = document.getElementById("output");
+
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            statusEl.innerText = "WebSocket connected!";
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                outputEl.innerText = JSON.stringify(data, null, 2);
+            } catch (err) {
+                console.error("Error parsing message:", err);
+            }
+        };
+
+        ws.onclose = () => {
+            statusEl.innerText = "WebSocket disconnected!";
+        };
+
+        ws.onerror = (err) => {
+            statusEl.innerText = "WebSocket error!";
+            console.error(err);
+        };
+    </script>
+</body>
+
+</html>

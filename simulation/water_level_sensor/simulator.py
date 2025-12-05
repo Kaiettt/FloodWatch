@@ -26,7 +26,7 @@ class WaterLevelSimulator:
         self.update_interval = update_interval
         self.running = False
         self.sensors = self._initialize_sensors()
-        self.orion_url = "http://localhost:1026/ngsi-ld/v1/"
+        self.orion_url = "http://orion-ld:1026/ngsi-ld/v1/"
         self.headers = {
             "Content-Type": "application/json",
             "Link": '<https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.6.jsonld>; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"'
@@ -35,7 +35,7 @@ class WaterLevelSimulator:
     def _initialize_sensors(self) -> Dict[str, Dict[str, Any]]:
         """Initialize simulated sensors with their locations."""
         return {
-            "sensor-0029": {
+            "sensor-00105": {
                 "location": {
                     "type": "Point",
                     "coordinates": [106.7, 10.7]  # Longitude, Latitude
@@ -44,7 +44,7 @@ class WaterLevelSimulator:
                 "variation_range": 0.5,  # Max variation from base level
                 "alert_threshold": 3.0  # Water level that triggers alerts
             },
-            "sensor-0030": {
+            "sensor-00112": {
                 "location": {
                     "type": "Point",
                     "coordinates": [106.71, 10.69]

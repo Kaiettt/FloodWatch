@@ -4,3 +4,6 @@ python-multipart
 pydantic
 requests
 python-dotenv
+crate
+asyncpg
+databases[postgresql]

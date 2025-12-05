@@ -6,10 +6,11 @@ from typing import List, Optional
 import json
 
 # --- Config ---
-ORION_LD_URL = os.getenv("ORION_LD_URL", "http://localhost:1026/ngsi-ld/v1/entities")
+ORION_LD_URL = os.getenv("ORION_ENTITIES", "http://orion-ld:1026/ngsi-ld/v1/entities")
+BASE_URL = os.getenv("BASE_URL", "http://api:8000")
 
 HEADERS = {
-    "Content-Type": "application/ld+json"  # Chỉ cần thế này thôi
+    "Content-Type": "application/ld+json"
 }
 
 # --- Build payload ---
@@ -19,8 +20,7 @@ def build_crowd_report_sdm(
     photo_urls: Optional[List[str]] = None,
     lat: Optional[float] = None,
     lng: Optional[float] = None,
-    location_id: Optional[str] = None,
-    observation_id: Optional[str] = None
+    water_level: Optional[float] = None
 ) -> dict:
     """
     Build CrowdReport entity in NGSI-LD Smart Data Model format
@@ -35,7 +35,7 @@ def build_crowd_report_sdm(
         "description": {"type": "Property", "value": description},
         "photos": {"type": "Property", "value": photo_urls or []},
         "timestamp": {"type": "Property", "value": timestamp},
-        "verified": {"type": "Property", "value": False},
+        "verified": {"type": "Property", "value": True},
          "@context": ["https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"]
     }
 
@@ -45,10 +45,13 @@ def build_crowd_report_sdm(
             "value": {"type": "Point", "coordinates": [lng, lat]}
         }
 
-    if location_id:
-        payload["locatedAt"] = {"type": "Relationship", "object": location_id}
-    if observation_id:
-        payload["contributesTo"] = {"type": "Relationship", "object": observation_id}
+    
+    if water_level is not None:
+        payload["waterLevel"] = {
+            "type": "Property",
+            "value": water_level,
+            "unitCode": "MTR"
+        }
 
     return payload
 
@@ -59,13 +62,19 @@ def create_crowd_report_entity(
     photo_urls: Optional[List[str]] = None,
     lat: Optional[float] = None,
     lng: Optional[float] = None,
-    location_id: Optional[str] = None,
-    observation_id: Optional[str] = None
+    water_level: Optional[float] = None
 ) -> str:
     """
     Create a CrowdReport entity in Orion-LD
     """
-    payload = build_crowd_report_sdm(description, reporterId, photo_urls, lat, lng, location_id, observation_id)
+    payload = build_crowd_report_sdm(
+        description=description,
+        reporterId=reporterId,
+        photo_urls=photo_urls,
+        lat=lat,
+        lng=lng,
+        water_level=water_level
+    )
 
     # Debug print
     print("\n=== PAYLOAD SENT TO ORION-LD ===")
@@ -92,7 +101,7 @@ if __name__ == "__main__":
         entity_id = create_crowd_report_entity(
             description="Ngập trên đường Nguyễn Huệ, khoảng 20cm",
             reporterId="user123",
-            photo_urls=["http://localhost:8000/static/uploads/example.png"],
+            photo_urls=[f"{BASE_URL}/static/uploads/example.png"],
             lat=21.0245,
             lng=105.84117
         )

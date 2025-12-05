@@ -5,42 +5,40 @@
         "type": "GeoProperty",
         "value": {
             "type": "Point",
-            "coordinates": [
-                105.84117,
-                21.0245
+            "coordinates": [lon, lat
             ]
         }
     },
     "severity": {
         "type": "Property",
-        "value": "Medium"
+        "value": "Low|Medium|Severe"
     },
     "crowdDepth": {
         "type": "Property",
-        "value": 0.20,
+        "value": <float>,
         "unitCode": "MTR"
     },
     "confidence": {
         "type": "Property",
-        "value": "Medium"
+        "value": "High|Medium|Low"
     },
     "sourceCrowd": {
         "type": "Relationship",
-        "object": "urn:ngsi-ld:CrowdReport:<uuid>"
+        "object": "<original-id>"
     },
     "timestamp": {
         "type": "Property",
-        "value": "2025-01-18T12:23:11Z"
+        "value": "ISO8601"
     },
     "verified": {
         "type": "Property",
-        "value": false
+        "value": <bool>
     },
     "updatedAt": {
         "type": "Property",
-        "value": "2025-01-18T12:25:00Z"
+        "value": "ISO8601"
     },
     "@context": [
-        "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"
+        "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.6.jsonld"
     ]
 }

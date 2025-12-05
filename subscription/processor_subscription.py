@@ -1,68 +1,72 @@
 import requests
-import json
 
-ORION_SUBSCRIPTIONS = "http://localhost:1026/ngsi-ld/v1/subscriptions"
-NGSI_CONTEXT = "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context.jsonld"
+ORION_URL = "http://localhost:1026/ngsi-ld/v1/subscriptions"
 
+# Your required @context
+CONTEXT = [
+    "https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.6.jsonld"
+]
 SUBSCRIPTIONS = [
     {
         "id": "urn:ngsi-ld:Subscription:WaterLevelObserved",
+        "name": "WaterLevelObserved-Subscription",
         "entity_type": "WaterLevelObserved",
-        "endpoint": "http://localhost:8000/flood/sensor",
-        "attributes": [
-            "waterLevel",
-            "location",
-            "alertThreshold",
-            "status"
-        ]
+        "endpoint": "http://host.docker.internal:8000/flood/sensor",
+        "attributes": ["waterLevel", "location", "status", "alertThreshold"]
     },
     {
         "id": "urn:ngsi-ld:Subscription:CrowdReport",
+        "name": "CrowdReport-Subscription",
         "entity_type": "CrowdReport",
-        "endpoint": "http://localhost:8000/flood/crowd",
+        "endpoint": "http://host.docker.internal:8000/flood/crowd",
         "attributes": [
-            "description",
-            "verified",
-            "location",
-            "timestamp"
+            "reporterId", "description", "photos", "timestamp","waterLevel",
+            "verified", "location"
         ]
     }
 ]
 
 
 def register_subscription(sub):
+
+    # --- YOUR REQUIRED FORMAT EXACTLY AS REQUESTED ---
     payload = {
         "id": sub["id"],
         "type": "Subscription",
-        "entities": [{"type": sub["entity_type"]}],
-        "watchedAttributes": sub["attributes"],     # <--- BẮT BUỘC
+        "status": "active",
+
+        "entities": [
+            {"type": sub["entity_type"]}
+        ],
+
         "notification": {
-            "attributes": sub["attributes"],
-            "format": "normalized",
             "endpoint": {
-                "uri": sub["endpoint"],
+                "uri": sub["endpoint"],     # <-- your FastAPI endpoint
                 "accept": "application/ld+json"
-            }
+            },
+            "attributes": sub["attributes"]
         },
-        "isActive": True,
-        "@context": [NGSI_CONTEXT]
+
+        "watchedAttributes": sub["attributes"],
+
+        "name": sub["name"],
+        "@context": CONTEXT
     }
+    # ----------------------------------------------------
 
-    print(f"Registering subscription for {sub['entity_type']} ...")
+    headers = {"Content-Type": "application/ld+json"}
 
-    resp = requests.post(     # <--- Dùng POST
-        ORION_SUBSCRIPTIONS,
-        json=payload,
-        headers={"Content-Type": "application/ld+json"}
-    )
+    res = requests.post(ORION_URL, json=payload, headers=headers)
 
-    print(f"→ Status {resp.status_code}")
-    if resp.status_code >= 300:
-        print("Error:", resp.text)
+    if res.status_code in (200, 201):
+        print(f"✔ Subscription created: {sub['id']}")
+    elif res.status_code == 409:
+        print(f"⚠ Already exists: {sub['id']}")
+    else:
+        print(f"❌ Failed ({res.status_code}) → {sub['id']}")
+        print(res.text)
 
 
 if __name__ == "__main__":
-    print("📡 Registering Orion-LD subscriptions...\n")
     for sub in SUBSCRIPTIONS:
         register_subscription(sub)
-    print("\n🔥 All subscriptions registered successfully.")
