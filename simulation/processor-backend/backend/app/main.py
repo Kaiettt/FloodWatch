@@ -373,6 +373,96 @@ async def process_flood_crowd(request: Request):
         logger.error(f"Unexpected error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
+# ======================================================
+# WEATHER ROUTE → WeatherObserved
+# ======================================================
+@app.post("/weather/notify")
+async def process_weather_notify(request: Request):
+    try:
+        raw = await request.json()
+        logger.info(f"[WeatherObserved] Incoming data: {json.dumps(raw, indent=2)}")
+
+        # Unwrap NGSI-LD notification
+        if "data" not in raw or len(raw["data"]) == 0:
+            raise HTTPException(400, "Invalid NGSI-LD notification format: missing data[]")
+
+        data = raw["data"][0]
+        entity_id = f"urn:ngsi-ld:WeatherObserved:{uuid.uuid4()}"
+
+        entity = {
+            "id": entity_id,
+            "type": "WeatherObserved",
+            "temperature": data.get("temperature"),
+            "humidity": data.get("humidity"),
+            "pressure": data.get("pressure"),
+            "windSpeed": data.get("windSpeed"),
+            "rainLevel": data.get("rainLevel"),
+            "dateObserved": data.get("dateObserved", {"type": "Property", "value": now_iso()}),
+            "location": validate_location(data.get("location", {})),
+            "@context": CONTEXT
+        }
+
+        headers = {"Content-Type": "application/ld+json"}
+        res = requests.post(ORION_LD_URL, json=entity, headers=headers)
+        res.raise_for_status()
+
+        logger.info(f"[WeatherObserved] Created entity {entity_id}")
+        return {"status": "success", "entity_id": entity_id}
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Orion-LD communication error: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Orion-LD communication error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# ======================================================
+# RAIN RISK ROUTE → FloodRiskRain
+# ======================================================
+@app.post("/flood/rainrisk")
+async def process_flood_rainrisk(request: Request):
+    try:
+        raw = await request.json()
+        logger.info(f"[FloodRiskRain] Incoming data: {json.dumps(raw, indent=2)}")
+
+        # Unwrap NGSI-LD notification
+        if "data" not in raw or len(raw["data"]) == 0:
+            raise HTTPException(400, "Invalid NGSI-LD notification format: missing data[]")
+
+        data = raw["data"][0]
+        entity_id = f"urn:ngsi-ld:FloodRiskRain:{uuid.uuid4()}"
+
+        risk_score = data.get("riskScore", {}).get("value")
+        date_observed = data.get("dateObserved", {"type": "Property", "value": now_iso()})
+        location = validate_location(data.get("location", {}))
+
+        if risk_score is None or not location:
+            raise HTTPException(400, "Missing required fields: riskScore or location")
+
+        entity = {
+            "id": entity_id,
+            "type": "FloodRiskRain",
+            "riskScore": {"type": "Property", "value": risk_score},
+            "dateObserved": date_observed,
+            "location": location,
+            "@context": CONTEXT
+        }
+
+        headers = {"Content-Type": "application/ld+json"}
+        res = requests.post(ORION_LD_URL, json=entity, headers=headers)
+        res.raise_for_status()
+
+        logger.info(f"[FloodRiskRain] Created entity {entity_id}")
+        return {"status": "success", "entity_id": entity_id}
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Orion-LD communication error: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"Orion-LD communication error: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 # ======================================================
 # 3. REPORT ROUTE
