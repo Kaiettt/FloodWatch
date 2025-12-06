@@ -16,7 +16,7 @@ CONTEXT = [
 ]
 
 def register_subscriptions_fastapi():
-    """Register 2 subscriptions with FastAPI endpoints."""
+    """Register 4 subscriptions with FastAPI endpoints."""
     subscriptions = [
         {
             "id": "urn:ngsi-ld:Subscription:WaterLevelObserved",
@@ -41,6 +41,13 @@ def register_subscriptions_fastapi():
             "entity_type": "WeatherObserved",
             "endpoint": f"{API_BASE_URL}/weather/notify",
             "attributes": ["temperature", "humidity", "pressure", "windSpeed", "rainLevel", "dateObserved"]
+        },
+        {
+            "id": "urn:ngsi-ld:Subscription:FloodRiskRain",
+            "name": "FloodRiskRain-Subscription",
+            "entity_type": "FloodRiskRain",
+            "endpoint": f"{API_BASE_URL}/flood/rainrisk",
+            "attributes": ["riskScore", "dateObserved", "location"]
         }
     ]
 
