@@ -23,7 +23,7 @@ def register_subscriptions_fastapi():
             "name": "WaterLevelObserved-Subscription",
             "entity_type": "WaterLevelObserved",
             "endpoint": f"{API_BASE_URL}/flood/sensor",
-            "attributes": ["waterLevel", "location", "status", "alertThreshold"]
+            "attributes": ["waterLevel", "location", "status", "alertThreshold","district"]
         },
         {
             "id": "urn:ngsi-ld:Subscription:CrowdReport",
@@ -32,7 +32,7 @@ def register_subscriptions_fastapi():
             "endpoint": f"{API_BASE_URL}/flood/crowd",
             "attributes": [
                 "reporterId", "description", "photos", "timestamp", "waterLevel",
-                "verified", "location"
+                "verified", "location","address"
             ]
         },
         {
@@ -80,7 +80,7 @@ def register_subscriptions_ql():
             "id": "urn:ngsi-ld:Subscription:WaterLevelObserved-QL",
             "name": "sub-WaterLevelObserved",
             "entity_type": "WaterLevelObserved",
-            "attributes": ["waterLevel", "location", "status", "alertThreshold"]
+            "attributes": ["waterLevel", "location", "status", "alertThreshold","district"]
         },
         {
             "id": "urn:ngsi-ld:Subscription:CrowdReport-QL",
@@ -88,7 +88,7 @@ def register_subscriptions_ql():
             "entity_type": "CrowdReport",
             "attributes": [
                 "reporterId", "description", "photos", "timestamp", "water_level",
-                "verified", "location"
+                "verified", "location","address"
             ]
         },
         {
@@ -103,14 +103,14 @@ def register_subscriptions_ql():
             "name": "sub-FloodRiskSensor",
             "entity_type": "FloodRiskSensor",
             "attributes": ["severity", "alert", "waterLevel", "confidence",
-                           "sourceSensor", "location", "updatedAt"]
+                           "sourceSensor", "location", "updatedAt","district"]
         },
         {
             "id": "urn:ngsi-ld:Subscription:FloodRiskCrowd",
             "name": "sub-FloodRiskCrowd",
             "entity_type": "FloodRiskCrowd",
             "attributes": ["riskScore", "riskLevel", "waterLevel", "location",
-                           "calculatedAt", "factors"]
+                           "calculatedAt", "factors","address"]
         },
         {
             "id": "urn:ngsi-ld:Subscription:WeatherObserved",

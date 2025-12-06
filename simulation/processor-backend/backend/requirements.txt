@@ -7,3 +7,5 @@ python-dotenv
 crate
 asyncpg
 databases[postgresql]
+aiohttp
+geopy

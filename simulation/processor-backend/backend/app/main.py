@@ -161,6 +161,7 @@ async def process_flood_sensor(request: Request):
         data = raw["data"][0]   # REAL entity from Fiware
         # ---------------------------------------------------
 
+        district = data.get("district", {}).get("value")
         water_level = data.get("waterLevel", {}).get("value")
         threshold = data.get("alertThreshold", {}).get("value", 3.0)
         location = validate_location(data.get("location", {}))
@@ -183,6 +184,10 @@ async def process_flood_sensor(request: Request):
             "type": "FloodRiskSensor",
             "location": location,
             "severity": {"type": "Property", "value": severity},
+            "district": {
+                    "type": "Property",
+                    "value": district
+                },
             "waterLevel": {
                 "type": "Property",
                 "value": water_level,
@@ -230,6 +235,15 @@ async def process_flood_crowd(request: Request):
         # --- Extract required fields from CrowdReport ---
         source_id = entity.get("id")
         
+        # Extract address from entity, not data, and ensure it's not None
+        address = None
+        if "address" in entity:
+            if isinstance(entity["address"], dict) and "value" in entity["address"]:
+                address = entity["address"]["value"]
+            else:
+                address = entity["address"]
+            logger.info(f"Extracted address: {address}")  # Debug log
+            print(f"Extracted address: {address}")
         # Handle waterLevel as NGSI-LD Property
         water_level_obj = entity.get("waterLevel", {})
         water_level = water_level_obj.get("value") if isinstance(water_level_obj, dict) else None
@@ -330,7 +344,11 @@ async def process_flood_crowd(request: Request):
                     "textSeverityFactor": round(text_severity_score, 3)
                 }
             },
-
+            **(
+                {"address": {"type": "Property", "value": address}} 
+                if address is not None 
+                else {}
+            ),
             "sourceReport": {
                 "type": "Relationship",
                 "object": source_id
@@ -448,99 +466,178 @@ async def ensure_tables_exist():
             cursor.close()
         if 'conn' in locals():
             conn.close()
-
-async def fetch_floodrisk_crowd():
+def execute_query(query, params=None):
     try:
         conn = client.connect(CRATEDB_HTTP_URL, username=CRATEDB_USER)
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT 
-                entity_id,
-                entity_type,
-                longitude(location_centroid) AS lng,
-                latitude(location_centroid) AS lat,
-                riskscore,
-                risklevel,
-                waterlevel,
-                calculatedat
-            FROM doc.etfloodriskcrowd
-            ORDER BY calculatedat DESC
-        """)
+        cursor.execute(query, params or [])
         columns = [desc[0] for desc in cursor.description]
         result = [dict(zip(columns, row)) for row in cursor.fetchall()]
         cursor.close()
         conn.close()
         return result
     except Exception as e:
-        logger.error(f"Error fetching flood risk crowd data: {str(e)}", exc_info=True)
+        logger.error(f"CrateDB Query ERROR: {str(e)}")
         return []
 
 
 
-
-async def fetch_floodrisk_sensor():
-    try:
-        conn = client.connect(CRATEDB_HTTP_URL, username=CRATEDB_USER)
-        cursor = conn.cursor()
-        cursor.execute("""
-            SELECT 
-                t.entity_id,
-                t.entity_type,
-                t.instanceid,
-                longitude(t.location_centroid) AS lng,
-                latitude(t.location_centroid) AS lat,
-                t.severity,
-                t.waterlevel,
-                t.updatedat
-            FROM doc.etfloodrisksensor t
-            INNER JOIN (
-                SELECT instanceid, MAX(updatedat) AS last_update
-                FROM doc.etfloodrisksensor
-                GROUP BY instanceid
-            ) sub
-            ON t.instanceid = sub.instanceid AND t.updatedat = sub.last_update
-        """)
-        columns = [desc[0] for desc in cursor.description]
-        result = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        cursor.close()
-        conn.close()
-        return result
-    except Exception as e:
-        logger.error(f"Error fetching flood risk sensor data: {str(e)}", exc_info=True)
-        return []
+# ===========================================================
+# 2. SNAPSHOT QUERIES
+# ===========================================================
+def get_snapshot_crowd(limit=300):
+    return execute_query(f"""
+        SELECT 
+            entity_id,
+            entity_type,
+            longitude(location_centroid) AS lng,
+            latitude(location_centroid) AS lat,
+            riskscore,
+            risklevel,
+            waterlevel,
+            address,
+            calculatedat
+        FROM doc.etcrowdreport
+        ORDER BY calculatedat DESC
+        LIMIT {limit}
+    """)
 
 
 
+def get_snapshot_sensor(limit=300):
+    return execute_query(f"""
+        SELECT 
+            t.entity_id,
+            t.entity_type,
+            t.instanceid,
+            longitude(t.location_centroid) AS lng,
+            latitude(t.location_centroid) AS lat,
+            t.severity,
+            t.waterlevel,
+            t.district,
+            t.updatedat
+        FROM doc.etfloodrisksensor t
+        INNER JOIN (
+            SELECT instanceid, MAX(updatedat) AS last_update
+            FROM doc.etfloodrisksensor
+            GROUP BY instanceid
+        ) sub
+        ON t.instanceid = sub.instanceid 
+        AND t.updatedat = sub.last_update
+        ORDER BY updatedat DESC
+        LIMIT {limit}
+    """)
 
 
+
+# ===========================================================
+# 3. INCREMENTAL QUERIES
+# ===========================================================
+def get_crowd_after(timestamp):
+    return execute_query("""
+        SELECT 
+            entity_id,
+            entity_type,
+            longitude(location_centroid) AS lng,
+            latitude(location_centroid) AS lat,
+            riskscore,
+            risklevel,
+            waterlevel,
+            address,
+            calculatedat
+        FROM doc.etcrowdreport
+        WHERE calculatedat > ?
+        ORDER BY calculatedat DESC
+    """, [timestamp])
+
+
+
+def get_sensor_after(timestamp):
+    return execute_query("""
+        SELECT 
+            entity_id,
+            entity_type,
+            instanceid,
+            longitude(location_centroid) AS lng,
+            latitude(location_centroid) AS lat,
+            severity,
+            waterlevel,
+            district,
+            updatedat
+        FROM doc.etfloodrisksensor
+        WHERE updatedat > ?
+        ORDER BY updatedat DESC
+    """, [timestamp])
+
+
+
+# ===========================================================
+# 4. WEBSOCKET HANDLER
+# ===========================================================
 @app.websocket("/ws/map")
-async def websocket_map(websocket: WebSocket):
-    await websocket.accept()
+async def websocket_map(ws: WebSocket):
+    await ws.accept()
+
+    last_crowd_ts = None
+    last_sensor_ts = None
+
     try:
         while True:
-            try:
-                crowd_data = await fetch_floodrisk_crowd()
-                sensor_data = await fetch_floodrisk_sensor()
-                payload = {
-                    "crowd": crowd_data,
-                    "sensor": sensor_data,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
-                await websocket.send_text(json.dumps(payload, default=str))
-            except Exception as e:
-                logger.error(f"Error in WebSocket loop: {str(e)}")
-                await websocket.send_text(json.dumps({
-                    "error": "Failed to fetch data",
-                    "details": str(e)
-                }))
-            await asyncio.sleep(5)
+            msg = await ws.receive_text()
+            data = json.loads(msg)
+            msg_type = data.get("type")
+
+            # STEP 1 — INITIAL SNAPSHOT
+            if msg_type == "init":
+
+                crowd = get_snapshot_crowd()
+                sensor = get_snapshot_sensor()
+
+                if crowd:
+                    last_crowd_ts = crowd[0]["calculatedat"]
+                if sensor:
+                    last_sensor_ts = sensor[0]["updatedat"]
+
+                await ws.send_text(json.dumps({
+                    "type": "snapshot",
+                    "crowd": crowd,
+                    "sensor": sensor
+                }, default=str))
+
+                continue
+
+            # STEP 2 — POLLING
+            if msg_type == "poll":
+
+                updates = {"type": "update", "crowd": [], "sensor": []}
+
+                if last_crowd_ts:
+                    new_crowd = get_crowd_after(last_crowd_ts)
+                    if new_crowd:
+                        last_crowd_ts = new_crowd[0]["calculatedat"]
+                        updates["crowd"] = new_crowd
+
+                if last_sensor_ts:
+                    new_sensor = get_sensor_after(last_sensor_ts)
+                    if new_sensor:
+                        last_sensor_ts = new_sensor[0]["updatedat"]
+                        updates["sensor"] = new_sensor
+
+                if not updates["crowd"] and not updates["sensor"]:
+                    continue
+
+                await ws.send_text(json.dumps(updates, default=str))
+
     except WebSocketDisconnect:
-        logger.info("WebSocket client disconnected")
+        logger.info("WebSocket closed")
+    except Exception as e:
+        logger.error(f"WebSocket Error: {str(e)}")
+
     finally:
-        try:
-            await websocket.close()
-        except:
-            pass
+        await ws.close()
+
+
+
 
 
 # ======================================================

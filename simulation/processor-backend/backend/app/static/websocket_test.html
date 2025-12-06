@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FloodWatchX - WebSocket Test</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f2f5;
+            color: #333;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background-color: #1a73e8;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .main-content {
+            display: flex;
+            flex: 1;
+            padding: 1rem;
+            gap: 1rem;
+        }
+
+        #map {
+            flex: 2;
+            height: calc(100vh - 120px);
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .sidebar {
+            flex: 1;
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+        }
+
+        .status {
+            margin-bottom: 1rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+            background-color: #f8f9fa;
+        }
+
+        .status.connected {
+            border-left: 4px solid #28a745;
+        }
+
+        .status.disconnected {
+            border-left: 4px solid #dc3545;
+        }
+
+        .sensor-marker,
+        .crowd-marker {
+            border-radius: 50%;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 0 2px white, 0 0 0 4px #0003;
+        }
+
+        .sensor-marker {
+            background-color: #1a73e8;
+            width: 24px;
+            height: 24px;
+            font-size: 12px;
+        }
+
+        .crowd-marker {
+            background-color: #e91e63;
+            width: 20px;
+            height: 20px;
+            font-size: 10px;
+        }
+
+        .event-log {
+            margin-top: 1rem;
+            font-family: monospace;
+            font-size: 0.8rem;
+            max-height: 200px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            padding: 0.5rem;
+            border-radius: 4px;
+        }
+
+        .legend {
+            background: white;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+
+        .severity-high {
+            background-color: #dc3545;
+        }
+
+        .severity-medium {
+            background-color: #ffc107;
+        }
+
+        .severity-low {
+            background-color: #28a745;
+        }
+
+        .severity-unknown {
+            background-color: #6c757d;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>FloodWatchX - Real-time Monitoring</h1>
+            <div id="connection-status" class="status">Connecting to WebSocket...</div>
+        </header>
+        <div class="main-content">
+            <div id="map"></div>
+            <div class="sidebar">
+                <h3>Status</h3>
+                <div id="stats">
+                    <p>Sensors: <span id="sensor-count">0</span></p>
+                    <p>Crowd Reports: <span id="crowd-count">0</span></p>
+                    <p>Last Update: <span id="last-update">Never</span></p>
+                </div>
+
+                <div class="legend">
+                    <h4>Legend</h4>
+                    <div class="legend-item">
+                        <div class="legend-color sensor-marker"></div>
+                        <span>Sensor</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color crowd-marker"></div>
+                        <span>Crowd Report</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color severity-high"></div>
+                        <span>High Severity</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color severity-medium"></div>
+                        <span>Medium Severity</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color severity-low"></div>
+                        <span>Low Severity</span>
+                    </div>
+                </div>
+
+                <h3>Event Log</h3>
+                <div id="event-log" class="event-log"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Configuration
+        const WS_URL = `ws://${window.location.host}/ws/map`;
+        const DEFAULT_VIEW = [10.762622, 106.660172]; // Ho Chi Minh City as default
+        const ZOOM_LEVEL = 12;
+
+        // State
+        let map;
+        let ws;
+        let sensorMarkers = new Map();
+        let crowdMarkers = new Map();
+        let sensorCount = 0;
+        let crowdCount = 0;
+        let lastUpdate = null;
+
+        // DOM Elements
+        const connectionStatusEl = document.getElementById('connection-status');
+        const sensorCountEl = document.getElementById('sensor-count');
+        const crowdCountEl = document.getElementById('crowd-count');
+        const lastUpdateEl = document.getElementById('last-update');
+        const eventLogEl = document.getElementById('event-log');
+
+        // Initialize the map
+        function initMap() {
+            map = L.map('map').setView(DEFAULT_VIEW, ZOOM_LEVEL);
+
+            // Add OpenStreetMap tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            logEvent('Map initialized');
+        }
+
+        // Initialize WebSocket connection
+        function initWebSocket() {
+            logEvent(`Connecting to WebSocket at ${WS_URL}...`);
+
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                updateConnectionStatus(true);
+                logEvent('WebSocket connection established');
+
+                // Request initial data
+                ws.send(JSON.stringify({ type: "init" }));
+
+                // Start polling for updates every 5 seconds
+                setInterval(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: "poll" }));
+                    }
+                }, 5000);
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'snapshot') {
+                    logEvent(`Received snapshot with ${data.sensor?.length || 0} sensors and ${data.crowd?.length || 0} crowd reports`);
+                    processSensorData(data.sensor || []);
+                    processCrowdData(data.crowd || []);
+                } else if (data.type === 'update') {
+                    if (data.sensor && data.sensor.length > 0) {
+                        logEvent(`Received ${data.sensor.length} sensor updates`);
+                        processSensorData(data.sensor);
+                    }
+                    if (data.crowd && data.crowd.length > 0) {
+                        logEvent(`Received ${data.crowd.length} crowd report updates`);
+                        processCrowdData(data.crowd);
+                    }
+                }
+
+                updateLastUpdate();
+            };
+
+            ws.onclose = () => {
+                updateConnectionStatus(false);
+                logEvent('WebSocket connection closed. Attempting to reconnect...');
+
+                // Attempt to reconnect after 5 seconds
+                setTimeout(initWebSocket, 5000);
+            };
+
+            ws.onerror = (error) => {
+                logEvent(`WebSocket error: ${error.message || 'Unknown error'}`);
+            };
+        }
+
+        // Process sensor data and update markers
+        function processSensorData(sensors) {
+            sensors.forEach(sensor => {
+                const { entity_id, lng, lat, severity, waterlevel, district } = sensor;
+
+                if (!lng || !lat) return;
+
+                const position = [lat, lng];
+                const popupContent = `
+                    <div>
+                        <strong>Sensor:</strong> ${entity_id.split(':').pop()}<br>
+                        <strong>Severity:</strong> ${severity || 'N/A'}<br>
+                        <strong>Water Level:</strong> ${waterlevel !== undefined ? waterlevel + 'm' : 'N/A'}<br>
+                        ${district ? `<strong>District:</strong> ${district}<br>` : ''}
+                        <small>Updated: ${new Date().toLocaleTimeString()}</small>
+                    </div>
+                `;
+
+                // Update existing marker or create a new one
+                if (sensorMarkers.has(entity_id)) {
+                    const marker = sensorMarkers.get(entity_id);
+                    marker.setLatLng(position);
+                    marker.setPopupContent(popupContent);
+                } else {
+                    const marker = L.marker(position, {
+                        icon: L.divIcon({
+                            className: 'sensor-marker',
+                            html: 'S',
+                            iconSize: [24, 24]
+                        })
+                    })
+                        .bindPopup(popupContent)
+                        .addTo(map);
+
+                    sensorMarkers.set(entity_id, marker);
+                    sensorCount++;
+                    sensorCountEl.textContent = sensorCount;
+                }
+            });
+        }
+
+        // Process crowd report data and update markers
+        function processCrowdData(reports) {
+            reports.forEach(report => {
+                const { entity_id, lng, lat, risklevel, riskscore, waterlevel, address } = report;
+
+                if (!lng || !lat) return;
+
+                const position = [lat, lng];
+                const popupContent = `
+                    <div>
+                        <strong>Report:</strong> ${entity_id.split(':').pop()}<br>
+                        <strong>Risk Level:</strong> ${risklevel || 'N/A'}<br>
+                        <strong>Risk Score:</strong> ${riskscore !== undefined ? riskscore.toFixed(2) : 'N/A'}<br>
+                        <strong>Water Level:</strong> ${waterlevel !== undefined ? waterlevel + 'm' : 'N/A'}<br>
+                        ${address ? `<strong>Location:</strong> ${JSON.stringify(address)}<br>` : ''}
+                        <small>Reported: ${new Date().toLocaleTimeString()}</small>
+                    </div>
+                `;
+
+                // Update existing marker or create a new one
+                if (crowdMarkers.has(entity_id)) {
+                    const marker = crowdMarkers.get(entity_id);
+                    marker.setLatLng(position);
+                    marker.setPopupContent(popupContent);
+                } else {
+                    const marker = L.marker(position, {
+                        icon: L.divIcon({
+                            className: 'crowd-marker',
+                            html: 'C',
+                            iconSize: [20, 20]
+                        })
+                    })
+                        .bindPopup(popupContent)
+                        .addTo(map);
+
+                    crowdMarkers.set(entity_id, marker);
+                    crowdCount++;
+                    crowdCountEl.textContent = crowdCount;
+                }
+            });
+        }
+
+        // Update connection status UI
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connection-status');
+            statusEl.textContent = connected ? 'Connected to WebSocket' : 'Disconnected from WebSocket';
+            statusEl.className = `status ${connected ? 'connected' : 'disconnected'}`;
+        }
+
+        // Update last update timestamp
+        function updateLastUpdate() {
+            lastUpdate = new Date();
+            lastUpdateEl.textContent = lastUpdate.toLocaleTimeString();
+        }
+
+        // Log events to the event log
+        function logEvent(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            eventLogEl.prepend(logEntry);
+
+            // Keep only the last 50 log entries
+            while (eventLogEl.children.length > 50) {
+                eventLogEl.removeChild(eventLogEl.lastChild);
+            }
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
+            initWebSocket();
+        });
+    </script>
+</body>
+
+</html>

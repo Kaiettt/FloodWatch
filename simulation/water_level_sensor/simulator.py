@@ -3,144 +3,171 @@ import random
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
 import aiohttp
-import json
 
 logger = logging.getLogger(__name__)
 
-@dataclass
-class WaterLevelReading:
-    """Represents a single water level reading."""
-    value: float  # in meters
-    timestamp: str
-    location: Dict[str, float]  # {latitude, longitude}
-    sensor_id: str
-    status: str = "ok"
-    unit: str = "m"
+# ============================================================
+# BOUNDING BOX 16 + bổ sung Quận 2 (bị thiếu trong bản gốc)
+# ============================================================
+district_bounds = {
+    "Quận 1":      (106.690, 106.710, 10.760, 10.785),
+    "Quận 2":      (106.760, 106.820, 10.760, 10.830),  # <-- THÊM
+    "Quận 3":      (106.680, 106.700, 10.760, 10.785),
+    "Quận 4":      (106.700, 106.720, 10.745, 10.770),
+    "Quận 5":      (106.655, 106.675, 10.745, 10.770),
+    "Quận 6":      (106.630, 106.660, 10.730, 10.760),
+    "Quận 7":      (106.700, 106.740, 10.700, 10.750),
+    "Quận 8":      (106.630, 106.680, 10.700, 10.740),
+    "Quận 10":     (106.650, 106.680, 10.750, 10.780),
+    "Quận 11":     (106.630, 106.670, 10.745, 10.780),
+    "Quận 12":     (106.640, 106.750, 10.850, 10.900),
+    "Tân Bình":    (106.640, 106.680, 10.780, 10.830),
+    "Tân Phú":     (106.610, 106.650, 10.780, 10.830),
+    "Phú Nhuận":   (106.670, 106.700, 10.790, 10.810),
+    "Bình Thành":  (106.690, 106.740, 10.785, 10.850),
+    "Gò Vấp":      (106.650, 106.710, 10.830, 10.900),
+    "Thủ Đức":     (106.740, 106.820, 10.800, 10.900)
+}
 
-class WaterLevelSimulator:
-    """Simulates water level sensors that report to Orion-LD."""
-    
-    def __init__(self, update_interval: int = 60):
-        self.update_interval = update_interval
+# phân bố theo nguy cơ ngập
+district_weights = {
+    "Bình Thành": 4, "Gò Vấp": 4, "Quận 6": 4, "Quận 8": 4,
+    "Tân Bình": 4, "Tân Phú": 4,
+    "Quận 1": 3, "Quận 3": 3, "Quận 5": 3, "Quận 10": 3, "Phú Nhuận": 3,
+    "Quận 2": 2, "Quận 7": 2, "Thủ Đức": 2, "Quận 4": 2, "Quận 11": 2
+}
+
+
+def random_point(bounds):
+    min_lng, max_lng, min_lat, max_lat = bounds
+    return [
+        round(random.uniform(min_lng, max_lng), 6),
+        round(random.uniform(min_lat, max_lat), 6)
+    ]
+
+
+# ============================================================
+# Sinh 50 sensors
+# ============================================================
+def create_sensors():
+    sensors = {}
+    districts = list(district_bounds.keys())
+    weights = [district_weights.get(d, 1) for d in districts]  # tránh crash
+
+    for i in range(50):
+        sensor_id = f"sensor-{10000 + i}"
+        district = random.choices(districts, weights)[0]
+        coords = random_point(district_bounds[district])
+
+        base = random.uniform(1.0, 2.2)
+        var = random.uniform(0.3, 0.7)
+
+        sensors[sensor_id] = {
+            "district": district,
+            "location": {
+                "type": "Point",
+                "coordinates": coords
+            },
+            "base_level": round(base, 2),
+            "variation": round(var, 2),
+            "alert_threshold": round(base + 1.0, 2)
+        }
+
+    return sensors
+
+
+@dataclass
+class WaterReading:
+    value: float
+    timestamp: str
+    latitude: float
+    longitude: float
+    district: str
+    status: str = "ok"
+
+
+# ============================================================
+# SIMULATOR
+# ============================================================
+class Simulator:
+
+    def __init__(self, interval=60):
+        self.interval = interval
+        self.sensors = create_sensors()
         self.running = False
-        self.sensors = self._initialize_sensors()
-        self.orion_url = "http://orion-ld:1026/ngsi-ld/v1/"
+
+        self.orion = "http://orion-ld:1026/ngsi-ld/v1"
         self.headers = {
             "Content-Type": "application/json",
             "Link": '<https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.6.jsonld>; rel="http://www.w3.org/ns/json-ld#context"; type="application/ld+json"'
         }
-    
-    def _initialize_sensors(self) -> Dict[str, Dict[str, Any]]:
-        """Initialize simulated sensors with their locations."""
-        return {
-            "sensor-00105": {
-                "location": {
-                    "type": "Point",
-                    "coordinates": [106.7, 10.7]  # Longitude, Latitude
-                },
-                "base_level": 2.0,  # Base water level in meters
-                "variation_range": 0.5,  # Max variation from base level
-                "alert_threshold": 3.0  # Water level that triggers alerts
+
+        self.session = None  # dùng 1 session duy nhất
+
+    def generate(self, sid):
+        s = self.sensors[sid]
+        v = s["base_level"] + random.uniform(-s["variation"], s["variation"])
+        v = round(max(v, 0), 2)
+
+        return WaterReading(
+            value=v,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            latitude=s["location"]["coordinates"][1],
+            longitude=s["location"]["coordinates"][0],
+            district=s["district"]
+        )
+
+    async def create_entity(self, sid):
+        url = f"{self.orion}/entities/urn:ngsi-ld:WaterLevelObserved:{sid}"
+
+        r = await self.session.get(url, headers=self.headers)
+        if r.status == 200:
+            return  # đã tồn tại
+
+        s = self.sensors[sid]
+        entity = {
+            "id": f"urn:ngsi-ld:WaterLevelObserved:{sid}",
+            "type": "WaterLevelObserved",
+
+            "district": {
+                "type": "Property",
+                "value": s["district"]
             },
-            "sensor-00112": {
-                "location": {
-                    "type": "Point",
-                    "coordinates": [106.71, 10.69]
-                },
-                "base_level": 1.8,
-                "variation_range": 0.7,
-                "alert_threshold": 2.8
+
+            "location": {
+                "type": "GeoProperty",
+                "value": s["location"]
+            },
+
+            "waterLevel": {
+                "type": "Property",
+                "value": 0.0
+            },
+
+            "alertThreshold": {
+                "type": "Property",
+                "value": s["alert_threshold"]
             }
         }
-    
-    async def _generate_reading(self, sensor_id: str) -> WaterLevelReading:
-        """Generate a simulated water level reading."""
-        sensor = self.sensors[sensor_id]
-        
-        # Simulate water level with some random variation
-        variation = random.uniform(-1, 1) * sensor["variation_range"]
-        value = max(0, sensor["base_level"] + variation)  # Water level can't be negative
-        
-        # Simulate occasional sensor errors
-        status = "ok"
-        if random.random() < 0.05:  # 5% chance of error
-            status = "error"
-            value = -1  # Invalid reading
-        
-        return WaterLevelReading(
-            value=round(value, 2),
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            location={
-                "latitude": sensor["location"]["coordinates"][1],
-                "longitude": sensor["location"]["coordinates"][0]
-            },
-            sensor_id=sensor_id,
-            status=status
-        )
-    
-    async def _create_entity_if_not_exists(self, sensor_id: str):
-        """Create a new water level sensor entity in Orion-LD if it doesn't exist."""
-        url = f"{self.orion_url}entities/urn:ngsi-ld:WaterLevelObserved:{sensor_id}"
-        
-        async with aiohttp.ClientSession() as session:
-            try:
-                # Check if entity exists
-                async with session.get(url, headers=self.headers) as resp:
-                    if resp.status == 200:
-                        logger.info(f"Entity {sensor_id} already exists in Orion-LD")
-                        return
-                
-                # Create new entity
-                sensor = self.sensors[sensor_id]
-                entity = {
-                    "id": f"urn:ngsi-ld:WaterLevelObserved:{sensor_id}",
-                    "type": "WaterLevelObserved",
-                    "location": {
-                        "type": "GeoProperty",
-                        "value": sensor["location"]
-                    },
-                    "waterLevel": {
-                        "type": "Property",
-                        "value": 0.0,
-                        "unitCode": "MTR",
-                        "observedAt": datetime.now(timezone.utc).isoformat()
-                    },
-                    "alertThreshold": {
-                        "type": "Property",
-                        "value": sensor["alert_threshold"],
-                        "unitCode": "MTR"
-                    },
-                    "status": {
-                        "type": "Property",
-                        "value": "initializing"
-                    }
-                }
-                
-                async with session.post(
-                    f"{self.orion_url}entities/",
-                    headers=self.headers,
-                    json=entity
-                ) as resp:
-                    if resp.status in (200, 201):
-                        logger.info(f"Created new WaterLevelObserved entity: {sensor_id}")
-                    else:
-                        logger.error(f"Failed to create entity: {await resp.text()}")
-                        
-            except Exception as e:
-                logger.error(f"Error creating entity: {e}")
-    
-    async def _update_sensor_data(self, sensor_id: str, reading: WaterLevelReading):
-        """Update sensor data in Orion-LD."""
-        update_url = f"{self.orion_url}entities/urn:ngsi-ld:WaterLevelObserved:{sensor_id}/attrs"
-        
-        update_data = {
+
+        await self.session.post(f"{self.orion}/entities",
+                                headers=self.headers,
+                                json=entity)
+
+    async def update(self, sid, reading: WaterReading):
+        url = f"{self.orion}/entities/urn:ngsi-ld:WaterLevelObserved:{sid}/attrs"
+
+        body = {
             "waterLevel": {
                 "type": "Property",
                 "value": reading.value,
                 "unitCode": "MTR",
                 "observedAt": reading.timestamp
+            },
+            "district": {
+                "type": "Property",
+                "value": reading.district
             },
             "status": {
                 "type": "Property",
@@ -150,77 +177,40 @@ class WaterLevelSimulator:
                 "type": "GeoProperty",
                 "value": {
                     "type": "Point",
-                    "coordinates": [
-                        reading.location["longitude"],
-                        reading.location["latitude"]
-                    ]
+                    "coordinates": [reading.longitude, reading.latitude]
                 }
             }
         }
-        
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.patch(
-                    update_url,
-                    headers=self.headers,
-                    json=update_data
-                ) as resp:
-                    if resp.status == 204:
-                        logger.debug(f"Updated {sensor_id} with value: {reading.value}m")
-                    else:
-                        logger.error(f"Failed to update {sensor_id}: {await resp.text()}")
-            except Exception as e:
-                logger.error(f"Error updating {sensor_id}: {e}")
-    
-    async def _simulate_sensor(self, sensor_id: str):
-        """Simulate a single sensor's operation."""
-        await self._create_entity_if_not_exists(sensor_id)
-        
+
+        await self.session.patch(url, headers=self.headers, json=body)
+
+    async def simulate_sensor(self, sid):
+        await self.create_entity(sid)
+
         while self.running:
-            try:
-                # Generate and send new reading
-                reading = await self._generate_reading(sensor_id)
-                await self._update_sensor_data(sensor_id, reading)
-                
-                # Log if water level is above threshold
-                if reading.status == "ok" and reading.value >= self.sensors[sensor_id]["alert_threshold"]:
-                    logger.warning(
-                        f"High water level alert! Sensor {sensor_id}: {reading.value}m "
-                        f"(threshold: {self.sensors[sensor_id]['alert_threshold']}m)"
-                    )
-                
-            except Exception as e:
-                logger.error(f"Error in sensor {sensor_id} simulation: {e}")
-            
-            # Wait for next reading
-            await asyncio.sleep(self.update_interval)
-    
+            reading = self.generate(sid)
+            await self.update(sid, reading)
+            await asyncio.sleep(self.interval)
+
     async def start(self):
-        """Start the water level sensor simulation."""
         self.running = True
-        logger.info("Starting water level sensor simulation...")
-        
-        # Start a task for each sensor
-        tasks = [
-            asyncio.create_task(self._simulate_sensor(sensor_id))
-            for sensor_id in self.sensors
-        ]
-        
-        # Keep the tasks running until stopped
-        await asyncio.gather(*tasks, return_exceptions=True)
-    
+
+        async with aiohttp.ClientSession() as sess:
+            self.session = sess
+            tasks = [asyncio.create_task(self.simulate_sensor(s)) for s in self.sensors]
+            await asyncio.gather(*tasks)
+
     async def stop(self):
-        """Stop the simulation."""
         self.running = False
-        logger.info("Stopping water level sensor simulation...")
 
+
+# ============================================================
+# RUN
+# ============================================================
 if __name__ == "__main__":
-    import logging
-    import asyncio
-
     logging.basicConfig(level=logging.INFO)
 
-    sim = WaterLevelSimulator(update_interval=10)
+    sim = Simulator(interval=60)
 
     try:
         asyncio.run(sim.start())

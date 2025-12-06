@@ -112,32 +112,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-
-  # Grafana dashboard
-  grafana:
-    image: grafana/grafana:9.3.2
-    container_name: grafana
-    depends_on:
-      cratedb:
-        condition: service_healthy
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_AUTH_ANONYMOUS_ENABLED=false
-    volumes:
-      - ./dashboard/grafana/provisioning:/etc/grafana/provisioning
-      - grafana-storage:/var/lib/grafana
-    networks:
-      - floodwatch-net
-    healthcheck:
-      test: [ "CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-
   # FastAPI Backend
   floodwatch-api:
     build:
@@ -183,6 +157,27 @@ services:
     restart: on-failure
 
   # Water Level Simulator
+  weather-simulator:
+    build:
+      context: ./simulation/weather_observation
+      dockerfile: Dockerfile
+    container_name: floodwatch-weather-simulator
+    environment:
+      - ORION_HOST=orion-ld
+      - WEATHER_ENTITY_ID=urn:ngsi-ld:WeatherObserved:HoChiMinh_District1
+      - FLOOD_ENTITY_ID=urn:ngsi-ld:FloodRiskRain:HoChiMinh_District1
+      - WEATHER_LON=106.70098
+      - WEATHER_LAT=10.77653
+      - OPENWEATHER_KEY=${OPENWEATHER_KEY}
+    depends_on:
+      orion-ld:
+        condition: service_healthy
+      quantumleap:
+        condition: service_healthy
+    networks:
+      - floodwatch-net
+    restart: unless-stopped
+
   water-level-simulator:
     build:
       context: ./simulation/water_level_sensor

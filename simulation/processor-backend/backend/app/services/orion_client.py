@@ -2,8 +2,9 @@ import os
 import uuid
 import datetime
 import requests
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import json
+from time import sleep
 
 # --- Config ---
 ORION_LD_URL = os.getenv("ORION_ENTITIES", "http://orion-ld:1026/ngsi-ld/v1/entities")
@@ -40,10 +41,28 @@ def build_crowd_report_sdm(
     }
 
     if lat is not None and lng is not None:
+        # Add location
         payload["location"] = {
             "type": "GeoProperty",
             "value": {"type": "Point", "coordinates": [lng, lat]}
         }
+        
+        # Get address details from coordinates
+        try:
+            address = reverse_geocode(lat, lng)
+            if address:
+                address_fields = {
+                    'district': address.get('county', '').replace('District', '').strip(),
+                    'ward': address.get('neighbourhood') or address.get('suburb', ''),
+                    'street': address.get('road', ''),
+                    'city': address.get('city') or address.get('town', '')
+                }
+                payload['address'] = {
+                    'type': 'Property',
+                    'value': address_fields
+                }
+        except Exception as e:
+            print(f"Error getting address from coordinates: {e}")
 
     
     if water_level is not None:
@@ -54,6 +73,34 @@ def build_crowd_report_sdm(
         }
 
     return payload
+
+def reverse_geocode(lat: float, lng: float) -> Dict[str, Any]:
+    """
+    Get address details from coordinates using OpenStreetMap Nominatim
+    
+    Args:
+        lat: Latitude
+        lng: Longitude
+        
+    Returns:
+        Dictionary containing address components
+    """
+    # Add a small delay to respect Nominatim's usage policy
+    sleep(1)
+    
+    url = f"https://nominatim.openstreetmap.org/reverse?format=json&lat={lat}&lon={lng}&addressdetails=1"
+    headers = {
+        'User-Agent': 'FloodWatchX/1.0 (your-email@example.com)'  # Replace with your app's name and contact
+    }
+    
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        return data.get('address', {})
+    except Exception as e:
+        print(f"Reverse geocoding failed: {e}")
+        return {}
 
 # --- Send to Orion-LD ---
 def create_crowd_report_entity(
