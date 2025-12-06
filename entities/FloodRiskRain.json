@@ -1,0 +1,8 @@
+{
+  "id": "urn:ngsi-ld:FloodRiskRain:1",
+  "type": "FloodRiskRain",
+  "riskScore": { "type": "Property", "value": 0.75 },
+  "dateObserved": { "type": "Property", "value": "2025-12-06T08:30:00Z" },
+  "location": { "type": "GeoProperty", "value": { "type": "Point", "coordinates": [103.851, 13.756] } },
+  "@context": ["https://uri.etsi.org/ngsi-ld/v1/ngsi-ld-core-context-v1.6.jsonld"]
+}
