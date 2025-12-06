@@ -34,6 +34,13 @@ def register_subscriptions_fastapi():
                 "reporterId", "description", "photos", "timestamp", "waterLevel",
                 "verified", "location"
             ]
+        },
+        {
+            "id": "urn:ngsi-ld:Subscription:WeatherObserved",
+            "name": "WeatherObserved-Subscription",
+            "entity_type": "WeatherObserved",
+            "endpoint": f"{API_BASE_URL}/weather/notify",
+            "attributes": ["temperature", "humidity", "pressure", "windSpeed", "rainLevel", "dateObserved"]
         }
     ]
 
@@ -104,6 +111,18 @@ def register_subscriptions_ql():
             "entity_type": "FloodRiskCrowd",
             "attributes": ["riskScore", "riskLevel", "waterLevel", "location",
                            "calculatedAt", "factors"]
+        },
+        {
+            "id": "urn:ngsi-ld:Subscription:WeatherObserved",
+            "name": "sub-WeatherObserved",
+            "entity_type": "WeatherObserved",
+            "attributes": ["temperature", "humidity", "pressure", "windSpeed", "rainLevel", "dateObserved"]
+        },
+        {
+            "id": "urn:ngsi-ld:Subscription:FloodRiskRain",
+            "name": "sub-FloodRiskRain",
+            "entity_type": "FloodRiskRain",
+            "attributes": ["riskScore", "dateObserved", "location"]
         }
     ]
 

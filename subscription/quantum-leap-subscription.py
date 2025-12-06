@@ -52,6 +52,16 @@ subscriptions = [
             "calculatedAt", "factors"
         ]
     },
+    {
+        "name": "sub-WeatherObserved",
+        "entity_type": "WeatherObserved",
+        "attributes": ["temperature", "humidity", "pressure", "windSpeed", "rainLevel", "dateObserved"]
+    },
+    {
+        "name": "sub-FloodRiskRain",
+        "entity_type": "FloodRiskRain",
+        "attributes": ["riskScore", "dateObserved", "location"]
+    }
 ]
 
 headers = {"Content-Type": "application/ld+json"}
