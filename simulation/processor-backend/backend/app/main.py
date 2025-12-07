@@ -1237,6 +1237,243 @@ async def get_report_detail(report_id: str):
 
 
 # ======================================================
+# WEATHER API - OpenWeather Integration
+# ======================================================
+
+from .services.weather_service import (
+    get_weather_for_district,
+    get_weather_all_districts,
+    get_weather_with_forecast,
+    get_weather_summary,
+    get_all_districts,
+    HCMC_DISTRICTS
+)
+from .services.gemini_service import (
+    chat_with_weather_ai,
+    get_weather_advice,
+    analyze_flood_risk,
+    clear_session,
+    get_session_info
+)
+
+@app.get("/api/weather/districts")
+async def get_districts_list():
+    """Get list of all HCMC districts."""
+    return {
+        "districts": HCMC_DISTRICTS,
+        "total": len(HCMC_DISTRICTS),
+        "city": "TP. Hồ Chí Minh"
+    }
+
+@app.get("/api/weather/current")
+async def get_current_weather(
+    district_ids: Optional[str] = Query(None, description="Comma-separated district IDs (e.g., q1,q7,thu_duc)")
+):
+    """
+    Get current weather for HCMC districts.
+    If district_ids not provided, returns default 6 main districts.
+    """
+    try:
+        ids = district_ids.split(",") if district_ids else None
+        weather_data = await get_weather_with_forecast(ids)
+        
+        if not weather_data:
+            raise HTTPException(503, "Không thể lấy dữ liệu thời tiết từ OpenWeather")
+        
+        return {
+            "success": True,
+            "data": weather_data,
+            "total": len(weather_data),
+            "timestamp": now_iso()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Weather API error: {e}")
+        raise HTTPException(500, f"Lỗi khi lấy dữ liệu thời tiết: {str(e)}")
+
+@app.get("/api/weather/all")
+async def get_all_weather():
+    """Get current weather for ALL HCMC districts (22 districts)."""
+    try:
+        weather_data = await get_weather_all_districts()
+        
+        if not weather_data:
+            raise HTTPException(503, "Không thể lấy dữ liệu thời tiết")
+        
+        summary = get_weather_summary(weather_data)
+        
+        return {
+            "success": True,
+            "data": weather_data,
+            "summary": summary,
+            "total": len(weather_data),
+            "timestamp": now_iso()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Weather all API error: {e}")
+        raise HTTPException(500, f"Lỗi: {str(e)}")
+
+@app.get("/api/weather/{district_id}")
+async def get_district_weather(district_id: str):
+    """Get detailed weather for a specific district with 5-hour forecast."""
+    try:
+        weather_data = await get_weather_for_district(district_id)
+        
+        if not weather_data:
+            raise HTTPException(404, f"Không tìm thấy quận: {district_id}")
+        
+        return {
+            "success": True,
+            "data": weather_data,
+            "timestamp": now_iso()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"District weather API error: {e}")
+        raise HTTPException(500, f"Lỗi: {str(e)}")
+
+# ======================================================
+# CHATBOT API - Gemini AI Integration
+# ======================================================
+
+from pydantic import BaseModel
+
+class ChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = "default"
+
+class ChatResponse(BaseModel):
+    success: bool
+    response: str
+    session_id: str
+    timestamp: str
+    error: Optional[str] = None
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def chat_endpoint(request: ChatRequest):
+    """
+    Chat với trợ lý AI về thời tiết.
+    Tự động lấy dữ liệu thời tiết hiện tại để đưa vào context.
+    """
+    try:
+        # Lấy dữ liệu thời tiết hiện tại để đưa vào context
+        weather_data = await get_weather_with_forecast()
+        
+        # Lấy summary ngập lụt
+        flood_data = None
+        try:
+            crowd = cached_get_snapshot_crowd(100)
+            sensor = cached_get_snapshot_sensor(100)
+            
+            severe_count = len([r for r in crowd if r.get('risklevel') == 'Severe'])
+            severe_count += len([r for r in sensor if r.get('severity') == 'Severe'])
+            
+            high_count = len([r for r in crowd if r.get('risklevel') == 'High'])
+            high_count += len([r for r in sensor if r.get('severity') == 'High'])
+            
+            # Lấy summary từ weather
+            summary = get_weather_summary(weather_data) if weather_data else {}
+            
+            flood_data = {
+                "severe": severe_count,
+                "high": high_count,
+                "total": len(crowd) + len(sensor),
+                "rainyDistricts": summary.get("rainyDistricts", []),
+                "districtsWithRainForecast": summary.get("districtsWithRainForecast", [])
+            }
+        except Exception as e:
+            logger.warning(f"Could not get flood data for chat context: {e}")
+        
+        # Gọi Gemini AI
+        result = await chat_with_weather_ai(
+            user_message=request.message,
+            session_id=request.session_id,
+            weather_data=weather_data,
+            flood_data=flood_data
+        )
+        
+        return ChatResponse(**result)
+        
+    except Exception as e:
+        logger.error(f"Chat API error: {e}")
+        return ChatResponse(
+            success=False,
+            response="Xin lỗi, tôi gặp sự cố khi xử lý câu hỏi. Vui lòng thử lại!",
+            session_id=request.session_id,
+            timestamp=now_iso(),
+            error=str(e)
+        )
+
+@app.post("/api/chat/clear")
+async def clear_chat_session(session_id: str = "default"):
+    """Clear chat history for a session."""
+    clear_session(session_id)
+    return {
+        "success": True,
+        "message": f"Đã xóa lịch sử chat cho session: {session_id}"
+    }
+
+@app.get("/api/chat/session/{session_id}")
+async def get_chat_session(session_id: str):
+    """Get info about a chat session."""
+    return get_session_info(session_id)
+
+@app.get("/api/weather/advice")
+async def get_quick_advice():
+    """Get quick weather advice based on current conditions."""
+    try:
+        weather_data = await get_weather_with_forecast()
+        advice = await get_weather_advice(weather_data)
+        
+        return {
+            "success": True,
+            "advice": advice,
+            "timestamp": now_iso()
+        }
+    except Exception as e:
+        logger.error(f"Weather advice API error: {e}")
+        raise HTTPException(500, f"Lỗi: {str(e)}")
+
+@app.get("/api/flood/risk-analysis")
+async def get_flood_risk_analysis():
+    """Get AI-powered flood risk analysis."""
+    try:
+        weather_data = await get_weather_with_forecast()
+        
+        # Get flood data
+        crowd = cached_get_snapshot_crowd(100)
+        sensor = cached_get_snapshot_sensor(100)
+        
+        summary = get_weather_summary(weather_data) if weather_data else {}
+        
+        flood_data = {
+            "severe": len([r for r in crowd if r.get('risklevel') == 'Severe']) + 
+                     len([r for r in sensor if r.get('severity') == 'Severe']),
+            "high": len([r for r in crowd if r.get('risklevel') == 'High']) + 
+                   len([r for r in sensor if r.get('severity') == 'High']),
+            "total": len(crowd) + len(sensor),
+            "rainyDistricts": summary.get("rainyDistricts", []),
+            "districtsWithRainForecast": summary.get("districtsWithRainForecast", [])
+        }
+        
+        analysis = await analyze_flood_risk(weather_data, flood_data)
+        
+        return {
+            "success": True,
+            "analysis": analysis,
+            "weatherSummary": summary,
+            "floodData": flood_data,
+            "timestamp": now_iso()
+        }
+    except Exception as e:
+        logger.error(f"Flood risk analysis API error: {e}")
+        raise HTTPException(500, f"Lỗi: {str(e)}")
+
+# ======================================================
 # ROOT & HEALTH CHECK
 # ======================================================
 
@@ -1245,7 +1482,7 @@ def root():
     """API root endpoint."""
     return {
         "message": "FloodWatch API Service",
-        "version": "3.1.0",
+        "version": "3.2.0",
         "status": "operational",
         "features": [
             "Improved severity calculation (absolute water level)",
@@ -1255,7 +1492,9 @@ def root():
             "Connection pooling",
             "Retry mechanism",
             "Image validation",
-            "Recent reports API"
+            "Recent reports API",
+            "OpenWeather Integration (HCMC 22 districts)",
+            "Gemini AI Chatbot"
         ],
         "endpoints": {
             "health": "/health",
@@ -1265,7 +1504,14 @@ def root():
             "nearby": "/api/flood/nearby",
             "report": "/report",
             "recent_reports": "/api/reports/recent",
-            "report_detail": "/api/reports/{report_id}"
+            "report_detail": "/api/reports/{report_id}",
+            "weather_current": "/api/weather/current",
+            "weather_all": "/api/weather/all",
+            "weather_district": "/api/weather/{district_id}",
+            "weather_districts_list": "/api/weather/districts",
+            "weather_advice": "/api/weather/advice",
+            "chat": "/api/chat",
+            "flood_risk_analysis": "/api/flood/risk-analysis"
         }
     }
 
