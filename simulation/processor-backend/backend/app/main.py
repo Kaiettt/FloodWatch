@@ -386,10 +386,10 @@ def get_snapshot_sensor(limit: int = 1000) -> list:
     """
     ✅ OPTIMIZED: Get latest sensor data from WaterLevelObserved entities
     Simulator creates WaterLevelObserved entities with zoneId for polygon zones.
-    Xóa duplicate, chỉ lấy record mới nhất.
+    Lấy record mới nhất cho mỗi zone.
     """
-    # ✅ FIX: Query từ bảng etwaterlevelobserved (entity type WaterLevelObserved từ simulator)
-    # Bảng này chứa dữ liệu từ polygon zones với zoneId, zoneName, waterTrend
+    # ✅ FIX: Sử dụng subquery để lấy record mới nhất của mỗi zoneid
+    # Tránh vấn đề LIMIT chỉ lấy một số zones đầu alphabet
     records = execute_query(f"""
         SELECT 
             t.entity_id,
@@ -402,8 +402,15 @@ def get_snapshot_sensor(limit: int = 1000) -> list:
             t.watertrend,
             t.zoneid,
             t.zonename,
-            t.reporttype
+            t.reporttype,
+            t.time_index
         FROM doc.etwaterlevelobserved t
+        INNER JOIN (
+            SELECT zoneid, MAX(time_index) as max_time
+            FROM doc.etwaterlevelobserved
+            WHERE location_centroid IS NOT NULL
+            GROUP BY zoneid
+        ) latest ON t.zoneid = latest.zoneid AND t.time_index = latest.max_time
         WHERE t.location_centroid IS NOT NULL
         AND latitude(t.location_centroid) BETWEEN 8.5 AND 23.4
         AND longitude(t.location_centroid) BETWEEN 102.1 AND 109.5
@@ -560,24 +567,33 @@ def get_crowd_after(timestamp) -> list:
 def get_sensor_after(timestamp) -> list:
     """Get new sensor data after timestamp.
     ✅ FIX: Query từ WaterLevelObserved table với polygon zone fields
+    Lấy record mới nhất của mỗi zone.
     """
     # Try WaterLevelObserved first (from simulator polygon zones)
+    # Sử dụng subquery để lấy record mới nhất của mỗi zoneid
     records = execute_query("""
         SELECT 
-            entity_id,
-            entity_type,
-            zoneid AS sensorinstanceid,
-            longitude(location_centroid) AS lng,
-            latitude(location_centroid) AS lat,
-            waterlevel,
-            district,
-            watertrend,
-            zoneid,
-            zonename,
-            reporttype
-        FROM doc.etwaterlevelobserved
-        WHERE location_centroid IS NOT NULL
-        ORDER BY zoneid
+            t.entity_id,
+            t.entity_type,
+            t.zoneid AS sensorinstanceid,
+            longitude(t.location_centroid) AS lng,
+            latitude(t.location_centroid) AS lat,
+            t.waterlevel,
+            t.district,
+            t.watertrend,
+            t.zoneid,
+            t.zonename,
+            t.reporttype,
+            t.time_index
+        FROM doc.etwaterlevelobserved t
+        INNER JOIN (
+            SELECT zoneid, MAX(time_index) as max_time
+            FROM doc.etwaterlevelobserved
+            WHERE location_centroid IS NOT NULL
+            GROUP BY zoneid
+        ) latest ON t.zoneid = latest.zoneid AND t.time_index = latest.max_time
+        WHERE t.location_centroid IS NOT NULL
+        ORDER BY t.zoneid
         LIMIT 100
     """)
     

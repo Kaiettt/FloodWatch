@@ -24,31 +24,31 @@ GEMINI_MODEL = "gemini-1.5-flash"  # Stable model - alternatives: gemini-pro, ge
 # SYSTEM PROMPTS
 # ======================================================
 
-WEATHER_ASSISTANT_PROMPT = """Bạn là trợ lý AI thời tiết chuyên nghiệp của ứng dụng FloodWatch - hệ thống cảnh báo ngập lụt TP.HCM.
+WEATHER_ASSISTANT_PROMPT = """Ban la tro ly AI thoi tiet chuyen nghiep cua ung dung FloodWatch - he thong canh bao ngap lut TP.HCM.
 
-## Vai trò của bạn:
-- Cung cấp thông tin thời tiết chính xác cho các quận huyện TP.HCM
-- Cảnh báo mưa lớn và nguy cơ ngập lụt
-- Đưa ra lời khuyên an toàn khi di chuyển
-- Giải thích các hiện tượng thời tiết bằng ngôn ngữ dễ hiểu
+## Vai tro cua ban:
+- Cung cap thong tin thoi tiet chinh xac cho cac quan huyen TP.HCM
+- Canh bao mua lon va nguy co ngap lut
+- Dua ra loi khuyen an toan khi di chuyen
+- Giai thich cac hien tuong thoi tiet bang ngon ngu de hieu
 
-## Quy tắc trả lời:
-1. Luôn trả lời bằng tiếng Việt
-2. Sử dụng emoji phù hợp để trực quan hơn
-3. Ngắn gọn, súc tích (tối đa 200 từ)
-4. Luôn đề cập đến nguồn dữ liệu nếu có
-5. Nếu không chắc chắn, hãy nói rõ
-6. Ưu tiên an toàn của người dùng
+## Quy tac tra loi:
+1. Luon tra loi bang tieng Viet
+2. Su dung emoji phu hop de truc quan hon
+3. Ngan gon, suc tich (toi da 200 tu)
+4. Luon de cap den nguon du lieu neu co
+5. Neu khong chac chan, hay noi ro
+6. Uu tien an toan cua nguoi dung
 
-## Các quận dễ ngập ở TP.HCM:
-- Quận 12, Bình Thạnh, Thủ Đức: Ngập do triều cường và mưa
-- Quận 8, Quận 6: Vùng trũng thấp
-- Gò Vấp, Tân Bình: Ngập cục bộ khi mưa to
+## Cac quan de ngap o TP.HCM:
+- Quan 12, Binh Thanh, Thu Duc: Ngap do trieu cuong va mua
+- Quan 8, Quan 6: Vung trung thap
+- Go Vap, Tan Binh: Ngap cuc bo khi mua to
 
-## Format trả lời:
-- Sử dụng bullet points khi liệt kê
-- Bold (**text**) cho thông tin quan trọng
-- Thêm emoji ở đầu các mục chính
+## Format tra loi:
+- Su dung bullet points khi liet ke
+- Bold (**text**) cho thong tin quan trong
+- Them emoji o dau cac muc chinh
 """
 
 # ======================================================
@@ -72,7 +72,7 @@ class ConversationManager:
             "parts": [{"text": content}]
         })
         
-        # Giữ chỉ max_history messages gần nhất
+        # Keep only max_history messages
         if len(self.conversations[session_id]) > self.max_history:
             self.conversations[session_id] = self.conversations[session_id][-self.max_history:]
     
@@ -150,7 +150,7 @@ async def call_gemini_api(
                 feedback = data["promptFeedback"]
                 if feedback.get("blockReason"):
                     logger.warning(f"Content blocked: {feedback.get('blockReason')}")
-                    return "Xin lỗi, tôi không thể trả lời câu hỏi này."
+                    return "Xin loi, toi khong the tra loi cau hoi nay."
             
             logger.warning(f"Unexpected Gemini response format: {data}")
             return None
@@ -179,32 +179,32 @@ def build_weather_context(weather_data: List[Dict], flood_data: Dict = None) -> 
     context_parts = []
     
     if weather_data:
-        context_parts.append("## Dữ liệu thời tiết hiện tại TP.HCM:")
+        context_parts.append("## Du lieu thoi tiet hien tai TP.HCM:")
         for w in weather_data[:10]:  # Limit to 10 districts
             forecast_info = ""
             if w.get("forecast"):
                 rain_hours = [f for f in w["forecast"] if f.get("pop", 0) > 50]
                 if rain_hours:
-                    forecast_info = f" | Dự báo mưa: {rain_hours[0].get('pop')}% lúc {rain_hours[0].get('hour')}"
+                    forecast_info = f" | Du bao mua: {rain_hours[0].get('pop')}% luc {rain_hours[0].get('hour')}"
             
             context_parts.append(
-                f"- **{w.get('location')}**: {w.get('temperature')}°C, "
+                f"- **{w.get('location')}**: {w.get('temperature')}C, "
                 f"{w.get('conditionText', w.get('condition'))}, "
-                f"Độ ẩm: {w.get('humidity')}%, "
-                f"Gió: {w.get('windSpeed')} km/h"
+                f"Do am: {w.get('humidity')}%, "
+                f"Gio: {w.get('windSpeed')} km/h"
                 f"{forecast_info}"
             )
     
     if flood_data:
-        context_parts.append("\n## Dữ liệu ngập lụt:")
+        context_parts.append("\n## Du lieu ngap lut:")
         if flood_data.get("severe"):
-            context_parts.append(f"- 🔴 Ngập nghiêm trọng: {flood_data.get('severe')} điểm")
+            context_parts.append(f"- Ngap nghiem trong: {flood_data.get('severe')} diem")
         if flood_data.get("high"):
-            context_parts.append(f"- 🟠 Ngập cao: {flood_data.get('high')} điểm")
+            context_parts.append(f"- Ngap cao: {flood_data.get('high')} diem")
         if flood_data.get("rainyDistricts"):
-            context_parts.append(f"- 🌧️ Quận đang mưa: {', '.join(flood_data.get('rainyDistricts', []))}")
+            context_parts.append(f"- Quan dang mua: {', '.join(flood_data.get('rainyDistricts', []))}")
     
-    context_parts.append(f"\n*Cập nhật: {datetime.now().strftime('%H:%M %d/%m/%Y')}*")
+    context_parts.append(f"\n*Cap nhat: {datetime.now().strftime('%H:%M %d/%m/%Y')}*")
     
     return "\n".join(context_parts)
 
@@ -215,24 +215,24 @@ async def chat_with_weather_ai(
     flood_data: Dict = None
 ) -> Dict[str, Any]:
     """
-    Chat với AI về thời tiết với context.
+    Chat with AI about weather with context.
     
     Args:
-        user_message: Tin nhắn của người dùng
-        session_id: ID session để tracking conversation
-        weather_data: Dữ liệu thời tiết hiện tại
-        flood_data: Dữ liệu ngập lụt
+        user_message: User message
+        session_id: Session ID for tracking conversation
+        weather_data: Current weather data
+        flood_data: Flood data
     
     Returns:
-        Dict với response và metadata
+        Dict with response and metadata
     """
     
-    # Build system prompt với context
+    # Build system prompt with context
     system_prompt = WEATHER_ASSISTANT_PROMPT
     
     if weather_data or flood_data:
         context = build_weather_context(weather_data, flood_data)
-        system_prompt += f"\n\n## Dữ liệu thực tế hiện tại:\n{context}"
+        system_prompt += f"\n\n## Du lieu thuc te hien tai:\n{context}"
     
     # Add user message to history
     conversation_manager.add_message(session_id, "user", user_message)
@@ -265,7 +265,7 @@ async def chat_with_weather_ai(
             "success": False,
             "response": fallback,
             "session_id": session_id,
-            "error": "Gemini API không phản hồi",
+            "error": "Gemini API khong phan hoi",
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
@@ -278,53 +278,53 @@ def get_fallback_response(user_message: str) -> str:
     
     message_lower = user_message.lower()
     
-    if any(word in message_lower for word in ["thời tiết", "nhiệt độ", "nắng", "mát"]):
-        return """🌤️ **Thông tin thời tiết TP.HCM:**
+    if any(word in message_lower for word in ["thoi tiet", "nhiet do", "nang", "mat"]):
+        return """Thong tin thoi tiet TP.HCM:
 
-Xin lỗi, tôi không thể kết nối với dữ liệu thời tiết lúc này.
+Xin loi, toi khong the ket noi voi du lieu thoi tiet luc nay.
 
-Bạn có thể:
-• Xem thẻ thời tiết bên trái để cập nhật nhanh
-• Thử lại sau vài giây
-• Kiểm tra kết nối internet
+Ban co the:
+- Xem the thoi tiet ben trai de cap nhat nhanh
+- Thu lai sau vai giay
+- Kiem tra ket noi internet
 
-⚠️ Nếu bạn cần thông tin khẩn cấp về ngập lụt, vui lòng gọi đường dây nóng: **1900-xxxx**"""
+Neu ban can thong tin khan cap ve ngap lut, vui long goi duong day nong: 1900-xxxx"""
 
-    if any(word in message_lower for word in ["mưa", "mưa to", "mưa lớn"]):
-        return """🌧️ **Thông tin về mưa:**
+    if any(word in message_lower for word in ["mua", "mua to", "mua lon"]):
+        return """Thong tin ve mua:
 
-Hiện tại tôi không thể truy cập dữ liệu mưa real-time.
+Hien tai toi khong the truy cap du lieu mua real-time.
 
-**Các quận hay ngập khi mưa to tại TP.HCM:**
-• Quận 12, Thủ Đức - triều cường + mưa
-• Quận 8, Quận 6 - vùng trũng
-• Bình Thạnh, Gò Vấp - ngập cục bộ
+Cac quan hay ngap khi mua to tai TP.HCM:
+- Quan 12, Thu Duc - trieu cuong + mua
+- Quan 8, Quan 6 - vung trung
+- Binh Thanh, Go Vap - ngap cuc bo
 
-💡 **Khuyến cáo:** Tránh di chuyển qua vùng ngập khi mưa to."""
+Khuyen cao: Tranh di chuyen qua vung ngap khi mua to."""
 
-    if any(word in message_lower for word in ["ngập", "lụt", "nước", "ngập lụt"]):
-        return """🌊 **Cảnh báo ngập lụt:**
+    if any(word in message_lower for word in ["ngap", "lut", "nuoc", "ngap lut"]):
+        return """Canh bao ngap lut:
 
-Tôi không thể lấy dữ liệu ngập lụt real-time lúc này.
+Toi khong the lay du lieu ngap lut real-time luc nay.
 
-**Biện pháp an toàn:**
-1. 🚗 Không cố lái xe qua vùng ngập
-2. 📱 Theo dõi cảnh báo từ ứng dụng
-3. 🏠 Di chuyển đồ đạc lên cao nếu ở vùng trũng
-4. 📞 Liên hệ cứu hộ nếu cần: **114**
+Bien phap an toan:
+1. Khong co lai xe qua vung ngap
+2. Theo doi canh bao tu ung dung
+3. Di chuyen do dac len cao neu o vung trung
+4. Lien he cuu ho neu can: 114
 
-Vui lòng thử lại sau để xem dữ liệu mới nhất."""
+Vui long thu lai sau de xem du lieu moi nhat."""
 
-    return """👋 Xin chào! Tôi là trợ lý thời tiết AI của FloodWatch.
+    return """Xin chao! Toi la tro ly thoi tiet AI cua FloodWatch.
 
-Hiện tại tôi gặp sự cố kết nối. Bạn có thể hỏi tôi về:
+Hien tai toi gap su co ket noi. Ban co the hoi toi ve:
 
-• ☀️ Thời tiết các quận TP.HCM
-• 🌧️ Dự báo mưa trong 5 giờ tới
-• 🌊 Cảnh báo ngập lụt
-• 🛣️ Tư vấn di chuyển an toàn
+- Thoi tiet cac quan TP.HCM
+- Du bao mua trong 5 gio toi
+- Canh bao ngap lut
+- Tu van di chuyen an toan
 
-Vui lòng thử lại câu hỏi của bạn!"""
+Vui long thu lai cau hoi cua ban!"""
 
 # ======================================================
 # QUICK ACTIONS
@@ -334,52 +334,52 @@ async def get_weather_advice(weather_data: List[Dict]) -> str:
     """Get quick weather advice based on current conditions."""
     
     if not weather_data:
-        return "Không có dữ liệu thời tiết để phân tích."
+        return "Khong co du lieu thoi tiet de phan tich."
     
-    prompt = f"""Dựa trên dữ liệu thời tiết sau, hãy đưa ra 3 lời khuyên ngắn gọn (mỗi lời khuyên 1 dòng) cho người dân TP.HCM:
+    prompt = f"""Dua tren du lieu thoi tiet sau, hay dua ra 3 loi khuyen ngan gon (moi loi khuyen 1 dong) cho nguoi dan TP.HCM:
 
 {build_weather_context(weather_data)}
 
-Trả lời với format:
-1. [emoji] Lời khuyên 1
-2. [emoji] Lời khuyên 2
-3. [emoji] Lời khuyên 3"""
+Tra loi voi format:
+1. [emoji] Loi khuyen 1
+2. [emoji] Loi khuyen 2
+3. [emoji] Loi khuyen 3"""
 
     messages = [{"role": "user", "parts": [{"text": prompt}]}]
     
     response = await call_gemini_api(
         messages=messages,
-        system_instruction="Bạn là chuyên gia thời tiết. Trả lời ngắn gọn, thực tế.",
+        system_instruction="Ban la chuyen gia thoi tiet. Tra loi ngan gon, thuc te.",
         temperature=0.5,
         max_tokens=300
     )
     
-    return response or "Không thể tạo lời khuyên lúc này."
+    return response or "Khong the tao loi khuyen luc nay."
 
 async def analyze_flood_risk(weather_data: List[Dict], flood_data: Dict) -> str:
     """Analyze flood risk based on weather and flood data."""
     
-    prompt = f"""Phân tích nguy cơ ngập lụt dựa trên dữ liệu sau:
+    prompt = f"""Phan tich nguy co ngap lut dua tren du lieu sau:
 
 {build_weather_context(weather_data, flood_data)}
 
-Hãy đưa ra:
-1. Đánh giá mức độ nguy cơ (Thấp/Trung bình/Cao/Rất cao)
-2. Các quận cần chú ý
-3. Khuyến cáo ngắn gọn
+Hay dua ra:
+1. Danh gia muc do nguy co (Thap/Trung binh/Cao/Rat cao)
+2. Cac quan can chu y
+3. Khuyen cao ngan gon
 
-Format: bullet points, có emoji."""
+Format: bullet points, co emoji."""
 
     messages = [{"role": "user", "parts": [{"text": prompt}]}]
     
     response = await call_gemini_api(
         messages=messages,
-        system_instruction="Bạn là chuyên gia cảnh báo thiên tai. Ưu tiên an toàn người dân.",
+        system_instruction="Ban la chuyen gia canh bao thien tai. Uu tien an toan nguoi dan.",
         temperature=0.3,
         max_tokens=500
     )
     
-    return response or "Không thể phân tích nguy cơ ngập lúc này."
+    return response or "Khong the phan tich nguy co ngap luc nay."
 
 # ======================================================
 # UTILITY FUNCTIONS
