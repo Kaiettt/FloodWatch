@@ -1,3 +1,6 @@
+# Copyright (c) 2025 FloodWatch Team
+# SPDX-License-Identifier: MIT
+
 import asyncio
 import logging
 import signal

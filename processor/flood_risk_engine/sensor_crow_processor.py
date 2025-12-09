@@ -1,3 +1,6 @@
+# Copyright (c) 2025 FloodWatch Team
+# SPDX-License-Identifier: MIT
+
 from fastapi import FastAPI, Request
 import httpx
 import uuid

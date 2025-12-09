@@ -1,3 +1,6 @@
+# Copyright (c) 2025 FloodWatch Team
+# SPDX-License-Identifier: MIT
+
 """
 Script to fix duplicate subscription issue
 Xóa các subscription cũ và tạo lại

@@ -1,3 +1,6 @@
+# Copyright (c) 2025 FloodWatch Team
+# SPDX-License-Identifier: MIT
+
 # ======================================================
 # FloodWatch - Gemini AI Service
 # Google Gemini API Integration for Weather Chatbot

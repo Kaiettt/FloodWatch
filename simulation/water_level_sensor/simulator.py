@@ -1,3 +1,6 @@
+# Copyright (c) 2025 FloodWatch Team
+# SPDX-License-Identifier: MIT
+
 """
 FloodWatch - Water Level Sensor Simulator
 Phiên bản mới với Polygon Flood Zones

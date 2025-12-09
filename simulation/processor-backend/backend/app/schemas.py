@@ -1,3 +1,6 @@
+# Copyright (c) 2025 FloodWatch Team
+# SPDX-License-Identifier: MIT
+
 from pydantic import BaseModel, Field
 from typing import List, Optional, Union, Any, Dict
 

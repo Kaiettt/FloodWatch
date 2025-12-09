@@ -1,3 +1,6 @@
+# Copyright (c) 2025 FloodWatch Team
+# SPDX-License-Identifier: MIT
+
 # ======================================================
 # FloodWatch - Alert Enhancer Service
 # Sử dụng Gemini AI để tạo mô tả cảnh báo thông minh

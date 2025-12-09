@@ -1,3 +1,6 @@
+# Copyright (c) 2025 FloodWatch Team
+# SPDX-License-Identifier: MIT
+
 """
 FloodWatch Subscription Manager v2.0
 =====================================

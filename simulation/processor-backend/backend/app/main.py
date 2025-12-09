@@ -1,3 +1,5 @@
+# Copyright (c) 2025 FloodWatch Team
+# SPDX-License-Identifier: MIT
 # ======================================================
 # FloodWatch Backend - OPTIMIZED VERSION v3.0
 # Fixed based on BACKEND_ISSUES_ANALYSIS.md

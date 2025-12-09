@@ -1,3 +1,6 @@
+# Copyright (c) 2025 FloodWatch Team
+# SPDX-License-Identifier: MIT
+
 """
 FloodWatch - Định nghĩa các vùng ngập thực tế TP.HCM
 
