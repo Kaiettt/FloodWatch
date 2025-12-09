@@ -1,3 +1,6 @@
+# Copyright (c) 2025 FloodWatch Team
+# SPDX-License-Identifier: MIT
+
 from fastapi import Request, HTTPException, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address

@@ -1,3 +1,6 @@
+# Copyright (c) 2025 FloodWatch Team
+# SPDX-License-Identifier: MIT
+
 from ultralytics import YOLO
 import cv2
 import numpy as np
