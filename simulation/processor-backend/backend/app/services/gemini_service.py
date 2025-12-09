@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # ======================================================
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyAg4xEPKC5hPA8hUcZ0TpN0rFXTQugSrtU")
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1"
-GEMINI_MODEL = "gemini-1.5-flash"  # Stable model - alternatives: gemini-pro, gemini-1.5-pro
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyDy8Hr3CUMumJ0M-Z5B2_TGKq3srKRNjPg")
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1"  # v1beta API
+GEMINI_MODEL = "gemini-2.5-flash-lite"  # Stable and fast model
 
 # ======================================================
 # SYSTEM PROMPTS
@@ -96,14 +96,31 @@ async def call_gemini_api(
     messages: List[Dict],
     system_instruction: str = None,
     temperature: float = 0.7,
-    max_tokens: int = 1024
+    max_tokens: int = 1024,
+    max_retries: int = 2
 ) -> Optional[str]:
-    """Call Gemini API with messages."""
+    """Call Gemini API with messages and retry logic for rate limits."""
     
     url = f"{GEMINI_BASE_URL}/models/{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
     
+    # Build contents - prepend system instruction as first user message if provided
+    contents = []
+    if system_instruction:
+        # Add system instruction as context in first message
+        contents.append({
+            "role": "user",
+            "parts": [{"text": f"[SYSTEM INSTRUCTION]\n{system_instruction}\n[END SYSTEM INSTRUCTION]\n\nHãy tuân thủ hướng dẫn trên trong tất cả các phản hồi."}]
+        })
+        contents.append({
+            "role": "model", 
+            "parts": [{"text": "Tôi hiểu và sẽ tuân thủ các hướng dẫn trên. Tôi sẵn sàng trợ giúp bạn về thời tiết và ngập lụt TP.HCM."}]
+        })
+    
+    # Add actual conversation messages
+    contents.extend(messages)
+    
     request_body = {
-        "contents": messages,
+        "contents": contents,
         "generationConfig": {
             "temperature": temperature,
             "maxOutputTokens": max_tokens,
@@ -112,63 +129,80 @@ async def call_gemini_api(
         }
     }
     
-    if system_instruction:
-        request_body["systemInstruction"] = {
-            "parts": [{"text": system_instruction}]
-        }
+    import asyncio
     
-    try:
-        logger.info(f"Calling Gemini API: {GEMINI_MODEL}")
-        logger.info(f"API Key (last 8 chars): ...{GEMINI_API_KEY[-8:]}")
-        logger.info(f"Request URL: {url[:80]}...")
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=request_body)
-            logger.info(f"Raw response status: {response.status_code}")
+    for attempt in range(max_retries + 1):
+        try:
+            logger.info(f"Calling Gemini API: {GEMINI_MODEL} (attempt {attempt + 1}/{max_retries + 1})")
+            logger.info(f"API Key (last 8 chars): ...{GEMINI_API_KEY[-8:]}")
             
-            # Log response status
-            logger.info(f"Gemini API response status: {response.status_code}")
-            
-            # Check for errors before raise_for_status
-            if response.status_code != 200:
-                logger.error(f"Gemini API error response: {response.text}")
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(url, json=request_body)
+                logger.info(f"Gemini API response status: {response.status_code}")
+                
+                # Handle rate limit (429)
+                if response.status_code == 429:
+                    error_data = response.json()
+                    retry_delay = 60  # Default 60s
+                    
+                    # Try to extract retry delay from response
+                    if "error" in error_data and "details" in error_data["error"]:
+                        for detail in error_data["error"]["details"]:
+                            if detail.get("@type", "").endswith("RetryInfo"):
+                                delay_str = detail.get("retryDelay", "60s")
+                                retry_delay = int(delay_str.replace("s", "")) + 5  # Add buffer
+                    
+                    logger.warning(f"Rate limited! Waiting {retry_delay}s before retry...")
+                    
+                    if attempt < max_retries:
+                        await asyncio.sleep(retry_delay)
+                        continue
+                    else:
+                        logger.error("Max retries reached for rate limit")
+                        return None
+                
+                # Check for other errors
+                if response.status_code != 200:
+                    logger.error(f"Gemini API error: {response.status_code} - {response.text[:500]}")
+                    return None
+                
+                data = response.json()
+                
+                # Extract text from response
+                if "candidates" in data and len(data["candidates"]) > 0:
+                    candidate = data["candidates"][0]
+                    if "content" in candidate and "parts" in candidate["content"]:
+                        parts = candidate["content"]["parts"]
+                        if len(parts) > 0 and "text" in parts[0]:
+                            logger.info("Gemini API response received successfully")
+                            return parts[0]["text"]
+                
+                # Check for blocked content
+                if "promptFeedback" in data:
+                    feedback = data["promptFeedback"]
+                    if feedback.get("blockReason"):
+                        logger.warning(f"Content blocked: {feedback.get('blockReason')}")
+                        return "Xin loi, toi khong the tra loi cau hoi nay."
+                
+                logger.warning(f"Unexpected Gemini response format: {data}")
                 return None
-            
-            data = response.json()
-            
-            # Extract text from response
-            if "candidates" in data and len(data["candidates"]) > 0:
-                candidate = data["candidates"][0]
-                if "content" in candidate and "parts" in candidate["content"]:
-                    parts = candidate["content"]["parts"]
-                    if len(parts) > 0 and "text" in parts[0]:
-                        logger.info("Gemini API response received successfully")
-                        return parts[0]["text"]
-            
-            # Check for blocked content
-            if "promptFeedback" in data:
-                feedback = data["promptFeedback"]
-                if feedback.get("blockReason"):
-                    logger.warning(f"Content blocked: {feedback.get('blockReason')}")
-                    return "Xin loi, toi khong the tra loi cau hoi nay."
-            
-            logger.warning(f"Unexpected Gemini response format: {data}")
+                
+        except httpx.TimeoutException:
+            logger.error("Gemini API timeout after 60s")
+            if attempt < max_retries:
+                await asyncio.sleep(5)
+                continue
             return None
-            
-    except httpx.TimeoutException:
-        logger.error("Gemini API timeout after 30s")
-        return None
-    except httpx.ConnectError as e:
-        logger.error(f"Gemini API connection error (check network/DNS): {e}")
-        return None
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Gemini API HTTP error: {e.response.status_code} - {e.response.text}")
-        return None
-    except Exception as e:
-        logger.error(f"Gemini API error: {type(e).__name__} - {e}")
-        import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
-        return None
+        except httpx.ConnectError as e:
+            logger.error(f"Gemini API connection error: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Gemini API error: {type(e).__name__} - {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return None
+    
+    return None
 
 # ======================================================
 # CHAT FUNCTIONS

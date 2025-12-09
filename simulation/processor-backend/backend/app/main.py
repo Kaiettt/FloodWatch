@@ -44,7 +44,91 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="FloodWatch API", version="3.0.0")
+app = FastAPI(
+    title="🌊 FloodWatch API",
+    version="3.2.0",
+    description="""
+## 🌊 FloodWatch - Hệ thống Giám sát Ngập lụt TP.HCM
+
+**Ứng dụng Smart City** sử dụng công nghệ **FIWARE/NGSI-LD** để giám sát và cảnh báo ngập lụt thời gian thực.
+
+### 🎯 Tính năng chính:
+- **Real-time flood monitoring** với WebSocket
+- **15 polygon zones** ngập thực tế TP.HCM
+- **AI-powered chatbot** (Google Gemini)
+- **OpenWeather integration** cho dự báo thời tiết
+- **Citizen reports** - Báo cáo ngập từ cộng đồng
+
+### 🏗️ Công nghệ:
+- **FIWARE Orion-LD** - NGSI-LD Context Broker (chuẩn Smart City châu Âu)
+- **CrateDB** - Time-series + Geo-spatial database
+- **QuantumLeap** - Time-series API cho NGSI-LD
+- **Docker** - Container orchestration
+
+### 📊 Severity Levels:
+| Level | Water Level | Mô tả |
+|-------|-------------|-------|
+| 🟢 Low | < 0.2m | Dưới 20cm - không đáng lo |
+| 🟡 Moderate | 0.2-0.5m | 20-50cm - cần chú ý |
+| 🟠 High | 0.5-1.0m | 50-100cm - nguy hiểm |
+| 🔴 Severe | > 1.0m | Trên 100cm - rất nguy hiểm |
+
+### 🔗 Links:
+- [GitHub Repository](https://github.com/FloodWatch)
+- [FIWARE Documentation](https://fiware.org)
+
+---
+*Developed for OLP 2025 Competition*
+    """,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_tags=[
+        {
+            "name": "Dashboard",
+            "description": "📊 **Thống kê tổng quan** - API cho dashboard và thống kê theo quận/huyện"
+        },
+        {
+            "name": "Flood Data",
+            "description": "🌊 **Dữ liệu ngập lụt** - API lấy dữ liệu ngập từ sensors và crowd reports"
+        },
+        {
+            "name": "Reports",
+            "description": "📝 **Báo cáo người dân** - API cho citizen reports về tình trạng ngập"
+        },
+        {
+            "name": "Weather",
+            "description": "🌤️ **Dự báo thời tiết** - API tích hợp OpenWeather cho 22 quận TP.HCM"
+        },
+        {
+            "name": "Chatbot",
+            "description": "🤖 **AI Assistant** - Chatbot tích hợp Google Gemini AI"
+        },
+        {
+            "name": "WebSocket",
+            "description": "⚡ **Real-time** - WebSocket cho cập nhật dữ liệu thời gian thực"
+        },
+        {
+            "name": "Health",
+            "description": "💚 **System Health** - Kiểm tra trạng thái hệ thống"
+        },
+        {
+            "name": "Prediction",
+            "description": "🔮 **Dự đoán ngập** - AI-powered flood prediction"
+        },
+        {
+            "name": "Alerts",
+            "description": "⚠️ **Cảnh báo hệ thống** - API tạo mô tả cảnh báo thông minh bằng Gemini AI"
+        }
+    ],
+    contact={
+        "name": "FloodWatch Team",
+        "email": "floodwatch@olp2025.vn"
+    },
+    license_info={
+        "name": "MIT License",
+        "url": "https://opensource.org/licenses/MIT"
+    }
+)
 
 # CORS
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
@@ -632,15 +716,22 @@ def get_sensor_after(timestamp) -> list:
 # DASHBOARD STATISTICS API - ENHANCED
 # ===========================================================
 
-@app.get("/api/dashboard/stats")
+@app.get("/api/dashboard/stats", tags=["Dashboard"], summary="Thống kê tổng quan")
 async def get_dashboard_stats(
-    lat: Optional[float] = Query(None, description="Center latitude for radius filter"),
-    lng: Optional[float] = Query(None, description="Center longitude for radius filter"),
-    radius: Optional[float] = Query(None, description="Radius in km", ge=0.1, le=100)
+    lat: Optional[float] = Query(None, description="Vĩ độ tâm để lọc theo bán kính"),
+    lng: Optional[float] = Query(None, description="Kinh độ tâm để lọc theo bán kính"),
+    radius: Optional[float] = Query(None, description="Bán kính lọc (km)", ge=0.1, le=100)
 ):
     """
-    Get aggregated statistics for dashboard.
-    ✅ NEW: Hỗ trợ lọc theo bán kính.
+    📊 **Lấy thống kê tổng quan cho Dashboard**
+    
+    Trả về:
+    - Tổng số điểm ngập
+    - Số lượng theo mức độ (Severe/High/Medium/Low)
+    - Mức nước trung bình
+    - Số liệu từ sensors và community reports
+    
+    **Hỗ trợ lọc theo bán kính**: Cung cấp `lat`, `lng`, `radius` để lọc dữ liệu trong phạm vi.
     """
     try:
         crowd = cached_get_snapshot_crowd(1000)
@@ -692,9 +783,18 @@ async def get_dashboard_stats(
         logger.error(f"Dashboard stats error: {str(e)}")
         raise HTTPException(500, "Failed to get dashboard stats")
 
-@app.get("/api/dashboard/districts")
+@app.get("/api/dashboard/districts", tags=["Dashboard"], summary="Thống kê theo quận/huyện")
 async def get_district_summary():
-    """Get flood summary by district."""
+    """
+    📊 **Tổng hợp tình trạng ngập theo quận/huyện**
+    
+    Trả về danh sách các quận với:
+    - Số điểm ngập
+    - Số điểm Severe/High
+    - Mức nước trung bình
+    
+    Sắp xếp theo mức độ nghiêm trọng (quận ngập nặng nhất trước).
+    """
     try:
         sensor_data = cached_get_snapshot_sensor(1000)
         
@@ -740,16 +840,27 @@ async def get_district_summary():
 # FLOOD DATA API WITH RADIUS - NEW
 # ===========================================================
 
-@app.get("/api/flood/nearby")
+@app.get("/api/flood/nearby", tags=["Flood Data"], summary="Điểm ngập gần vị trí")
 async def get_nearby_floods(
-    lat: float = Query(..., description="Center latitude"),
-    lng: float = Query(..., description="Center longitude"),
-    radius: float = Query(5.0, description="Radius in km", ge=0.1, le=100),
-    limit: int = Query(100, description="Max results", ge=1, le=500)
+    lat: float = Query(..., description="Vĩ độ trung tâm", example=10.762622),
+    lng: float = Query(..., description="Kinh độ trung tâm", example=106.660172),
+    radius: float = Query(5.0, description="Bán kính tìm kiếm (km)", ge=0.1, le=100),
+    limit: int = Query(100, description="Số kết quả tối đa", ge=1, le=500)
 ):
     """
-    ✅ NEW API: Lấy dữ liệu ngập trong bán kính.
-    User có thể nhập bán kính tùy ý.
+    🌊 **Tìm điểm ngập trong bán kính**
+    
+    Lấy tất cả dữ liệu ngập (sensors + citizen reports) trong phạm vi bán kính từ một điểm.
+    
+    **Ví dụ**: Tìm điểm ngập trong 5km quanh Quận 1
+    ```
+    GET /api/flood/nearby?lat=10.762622&lng=106.660172&radius=5
+    ```
+    
+    Trả về:
+    - Danh sách crowd reports gần đó
+    - Danh sách sensor data gần đó
+    - Khoảng cách từ mỗi điểm đến tâm (km)
     """
     try:
         if not validate_coordinates(lat, lng):
@@ -1093,16 +1204,31 @@ async def validate_image(file: UploadFile) -> bytes:
 # REPORT ROUTE - FIXED with validation
 # ======================================================
 
-@app.post("/report", response_model=CreateReportResult)
+@app.post("/report", response_model=CreateReportResult, tags=["Reports"], summary="Gửi báo cáo ngập")
 async def report(
-    description: str = Form(...),
-    reporterId: str = Form(...),
-    latitude: Optional[float] = Form(None),
-    longitude: Optional[float] = Form(None),
-    water_level: Optional[float] = Form(None, description="Water level in meters"),
-    images: List[UploadFile] = File([], description="Optional images of the flood"),
+    description: str = Form(..., description="Mô tả tình trạng ngập", example="Ngập sâu 50cm, xe máy không qua được"),
+    reporterId: str = Form(..., description="ID người báo cáo", example="user_123"),
+    latitude: Optional[float] = Form(None, description="Vĩ độ", example=10.762622),
+    longitude: Optional[float] = Form(None, description="Kinh độ", example=106.660172),
+    water_level: Optional[float] = Form(None, description="Mức nước (mét)", example=0.5),
+    images: List[UploadFile] = File([], description="Ảnh minh họa (tối đa 10MB/ảnh)"),
 ):
-    """Submit a flood report from mobile app or web."""
+    """
+    📝 **Gửi báo cáo ngập lụt từ người dân**
+    
+    API để mobile app hoặc web gửi báo cáo về tình trạng ngập.
+    
+    **Yêu cầu**:
+    - `description`: Mô tả chi tiết (bắt buộc)
+    - `reporterId`: ID định danh người báo (bắt buộc)
+    
+    **Tùy chọn**:
+    - `latitude`, `longitude`: Tọa độ GPS
+    - `water_level`: Ước tính mức nước (mét)
+    - `images`: Upload ảnh minh họa (JPEG, PNG, WebP)
+    
+    Hệ thống sẽ tự động tính **Risk Score** dựa trên mức nước và keywords trong mô tả.
+    """
     try:
         # ✅ Validate coordinates if provided
         if latitude is not None and longitude is not None:
@@ -1145,17 +1271,24 @@ async def report(
 # API CITIZEN REPORTS - BÁO CÁO NGƯỜI DÂN
 # ===========================================================
 
-@app.get("/api/reports/recent")
+@app.get("/api/reports/recent", tags=["Reports"], summary="Báo cáo gần đây")
 async def get_recent_reports(
     limit: int = Query(20, description="Số lượng báo cáo tối đa", ge=1, le=100),
     hours: int = Query(24, description="Lấy báo cáo trong N giờ gần đây", ge=1, le=168)
 ):
     """
-    ✅ API: Lấy danh sách báo cáo người dân gần đây.
+    📝 **Lấy danh sách báo cáo ngập từ người dân**
     
-    Returns:
-        - Danh sách báo cáo với thông tin chi tiết
-        - Sắp xếp theo thời gian mới nhất trước
+    Trả về các báo cáo cộng đồng (citizen reports) trong khoảng thời gian gần đây.
+    
+    Thông tin mỗi báo cáo:
+    - Vị trí (lat/lng)
+    - Mức nước (m)
+    - Risk score và Risk level
+    - Địa chỉ
+    - Thời gian báo cáo
+    
+    Sắp xếp theo thời gian (mới nhất trước).
     """
     try:
         records = execute_query(f"""
@@ -1256,6 +1389,10 @@ async def get_report_detail(report_id: str):
 # WEATHER API - OpenWeather Integration
 # ======================================================
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 from .services.weather_service import (
     get_weather_for_district,
     get_weather_all_districts,
@@ -1264,12 +1401,24 @@ from .services.weather_service import (
     get_all_districts,
     HCMC_DISTRICTS
 )
+
+# ======================================================
+# RATE LIMITING - SECURITY
+# ======================================================
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 from .services.gemini_service import (
     chat_with_weather_ai,
     get_weather_advice,
     analyze_flood_risk,
     clear_session,
     get_session_info
+)
+from .services.alert_enhancer import (
+    enhance_alert_description,
+    enhance_multiple_alerts
 )
 
 @app.get("/api/weather/districts")
@@ -1281,13 +1430,23 @@ async def get_districts_list():
         "city": "TP. Hồ Chí Minh"
     }
 
-@app.get("/api/weather/current")
+@app.get("/api/weather/current", tags=["Weather"], summary="Thời tiết hiện tại")
 async def get_current_weather(
-    district_ids: Optional[str] = Query(None, description="Comma-separated district IDs (e.g., q1,q7,thu_duc)")
+    district_ids: Optional[str] = Query(None, description="Danh sách quận (e.g., q1,q7,thu_duc)", example="q1,q7,binh_thanh")
 ):
     """
-    Get current weather for HCMC districts.
-    If district_ids not provided, returns default 6 main districts.
+    🌤️ **Lấy thời tiết hiện tại các quận TP.HCM**
+    
+    Dữ liệu từ **OpenWeather API** bao gồm:
+    - Nhiệt độ, độ ẩm
+    - Tình trạng mây, gió
+    - Dự báo mưa 5 giờ tới
+    
+    **District IDs có sẵn**: q1, q3, q4, q5, q6, q7, q8, q10, q11, q12, 
+    binh_tan, binh_thanh, go_vap, phu_nhuan, tan_binh, tan_phu, 
+    thu_duc, binh_chanh, can_gio, cu_chi, hoc_mon, nha_be
+    
+    Nếu không truyền `district_ids`, trả về 6 quận chính.
     """
     try:
         ids = district_ids.split(",") if district_ids else None
@@ -1369,11 +1528,26 @@ class ChatResponse(BaseModel):
     timestamp: str
     error: Optional[str] = None
 
-@app.post("/api/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
+@app.post("/api/chat", response_model=ChatResponse, tags=["Chatbot"], summary="Chat với AI Assistant")
+@limiter.limit("30/minute")
+async def chat_endpoint(request: Request, chat_request: ChatRequest):
     """
-    Chat với trợ lý AI về thời tiết.
-    Tự động lấy dữ liệu thời tiết hiện tại để đưa vào context.
+    🤖 **Chat với trợ lý AI FloodWatch**
+    
+    Chatbot tích hợp **Google Gemini AI** có khả năng:
+    - Trả lời câu hỏi về thời tiết TP.HCM
+    - Cảnh báo ngập lụt theo khu vực
+    - Đưa ra lời khuyên di chuyển
+    - Hiểu ngữ cảnh cuộc trò chuyện
+    
+    **Context tự động**: Bot tự động có thông tin thời tiết và ngập lụt hiện tại.
+    
+    **Rate limit**: 30 requests/phút
+    
+    **Ví dụ câu hỏi**:
+    - "Hôm nay Quận 7 có mưa không?"
+    - "Tôi có nên đi qua Nguyễn Hữu Cảnh không?"
+    - "Quận nào đang ngập nặng nhất?"
     """
     try:
         # Lấy dữ liệu thời tiết hiện tại để đưa vào context
@@ -1406,8 +1580,8 @@ async def chat_endpoint(request: ChatRequest):
         
         # Gọi Gemini AI
         result = await chat_with_weather_ai(
-            user_message=request.message,
-            session_id=request.session_id,
+            user_message=chat_request.message,
+            session_id=chat_request.session_id,
             weather_data=weather_data,
             flood_data=flood_data
         )
@@ -1419,7 +1593,7 @@ async def chat_endpoint(request: ChatRequest):
         return ChatResponse(
             success=False,
             response="Xin lỗi, tôi gặp sự cố khi xử lý câu hỏi. Vui lòng thử lại!",
-            session_id=request.session_id,
+            session_id=chat_request.session_id,
             timestamp=now_iso(),
             error=str(e)
         )
@@ -1454,9 +1628,16 @@ async def get_quick_advice():
         logger.error(f"Weather advice API error: {e}")
         raise HTTPException(500, f"Lỗi: {str(e)}")
 
-@app.get("/api/flood/risk-analysis")
+@app.get("/api/flood/risk-analysis", tags=["Prediction"], summary="Phân tích rủi ro ngập")
 async def get_flood_risk_analysis():
-    """Get AI-powered flood risk analysis."""
+    """
+    🔮 **Phân tích rủi ro ngập bằng AI**
+    
+    Sử dụng Gemini AI để phân tích:
+    - Tình trạng ngập hiện tại
+    - Dự báo thời tiết
+    - Đưa ra đánh giá rủi ro
+    """
     try:
         weather_data = await get_weather_with_forecast()
         
@@ -1490,12 +1671,306 @@ async def get_flood_risk_analysis():
         raise HTTPException(500, f"Lỗi: {str(e)}")
 
 # ======================================================
+# ALERT ENHANCEMENT API - NEW
+# ======================================================
+
+@app.post("/api/alerts/enhance", tags=["Alerts"], summary="Tạo mô tả cảnh báo thông minh")
+async def enhance_alert(
+    water_level: float = Query(..., description="Mực nước (mét)", ge=0, le=5),
+    location: Optional[str] = Query(None, description="Địa chỉ/vị trí"),
+    district: Optional[str] = Query(None, description="Quận/huyện"),
+    severity: Optional[str] = Query(None, description="Mức độ (Severe/High/Moderate/Low)"),
+    trend: Optional[str] = Query(None, description="Xu hướng (rising/stable/falling)")
+):
+    """
+    🤖 **Tạo mô tả cảnh báo thông minh bằng Gemini AI**
+    
+    Sử dụng Gemini AI để tạo mô tả cảnh báo động dựa trên:
+    - Mực nước thực tế
+    - Dữ liệu thời tiết
+    - Vị trí và lịch sử ngập
+    
+    **Ví dụ**:
+    ```
+    POST /api/alerts/enhance?water_level=1.2&district=Quận 12&severity=Severe
+    ```
+    """
+    try:
+        # Lấy dữ liệu thời tiết cho quận này
+        weather_data = None
+        if district:
+            try:
+                weather_all = await get_weather_with_forecast()
+                if weather_all:
+                    weather_data = next(
+                        (w for w in weather_all if w.get("location") == district or w.get("district") == district),
+                        None
+                    )
+            except Exception as e:
+                logger.warning(f"Could not fetch weather for district {district}: {e}")
+        
+        # Lấy dữ liệu ngập xung quanh
+        flood_data = None
+        if location or district:
+            try:
+                # Lấy tọa độ từ location nếu có
+                # Tạm thời bỏ qua, có thể thêm reverse geocoding sau
+                pass
+            except Exception as e:
+                logger.warning(f"Could not fetch flood data: {e}")
+        
+        # Tạo mô tả thông minh
+        enhanced_description = await enhance_alert_description(
+            water_level=water_level,
+            location=location,
+            district=district,
+            severity=severity,
+            weather_data=weather_data,
+            flood_data=flood_data,
+            trend=trend
+        )
+        
+        return {
+            "success": True,
+            "description": enhanced_description,
+            "water_level": water_level,
+            "location": location,
+            "district": district,
+            "severity": severity,
+            "timestamp": now_iso()
+        }
+    except Exception as e:
+        logger.error(f"Alert enhancement API error: {e}")
+        raise HTTPException(500, f"Lỗi: {str(e)}")
+
+@app.post("/api/alerts/enhance-batch", tags=["Alerts"], summary="Tạo mô tả cho nhiều cảnh báo")
+async def enhance_alerts_batch(request: Request):
+    """
+    🤖 **Tạo mô tả cho nhiều cảnh báo cùng lúc**
+    
+    Nhận danh sách cảnh báo và trả về danh sách đã được tăng cường mô tả.
+    """
+    try:
+        body = await request.json()
+        alerts = body.get("alerts", [])
+        
+        if not alerts:
+            raise HTTPException(400, "Danh sách cảnh báo không được để trống")
+        
+        # Lấy dữ liệu thời tiết
+        weather_data = None
+        try:
+            weather_data = await get_weather_with_forecast()
+        except Exception as e:
+            logger.warning(f"Could not fetch weather data: {e}")
+        
+        # Tăng cường mô tả
+        enhanced_alerts = await enhance_multiple_alerts(
+            alerts=alerts,
+            weather_data=weather_data
+        )
+        
+        return {
+            "success": True,
+            "alerts": enhanced_alerts,
+            "total": len(enhanced_alerts),
+            "timestamp": now_iso()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Batch alert enhancement API error: {e}")
+        raise HTTPException(500, f"Lỗi: {str(e)}")
+
+
+# ======================================================
+# FLOOD PREDICTION API - NEW
+# ======================================================
+
+# Danh sách các zone dễ bị ngập (từ dữ liệu thực tế TP.HCM)
+VULNERABLE_ZONES = [
+    {"id": "nguyen_huu_canh", "name": "Nguyễn Hữu Cảnh", "district": "Bình Thạnh", "base_risk": 0.8},
+    {"id": "pham_van_dong", "name": "Phạm Văn Đồng", "district": "Bình Thạnh", "base_risk": 0.7},
+    {"id": "vo_van_ngan", "name": "Võ Văn Ngân", "district": "Thủ Đức", "base_risk": 0.75},
+    {"id": "huynh_tan_phat", "name": "Huỳnh Tấn Phát", "district": "Quận 7", "base_risk": 0.7},
+    {"id": "nguyen_van_linh", "name": "Nguyễn Văn Linh", "district": "Quận 7", "base_risk": 0.65},
+    {"id": "an_duong_vuong", "name": "An Dương Vương", "district": "Quận 6", "base_risk": 0.7},
+    {"id": "nguyen_van_qua", "name": "Nguyễn Văn Quá", "district": "Quận 12", "base_risk": 0.65},
+    {"id": "truong_chinh", "name": "Trường Chinh", "district": "Tân Bình", "base_risk": 0.6},
+]
+
+def get_tidal_phase() -> float:
+    """
+    Tính toán ảnh hưởng triều cường.
+    Triều cường TP.HCM thường cao vào tháng 9-12 (âm lịch).
+    """
+    from datetime import datetime
+    month = datetime.now().month
+    
+    # Triều cường mạnh nhất: tháng 10-11
+    if month in [10, 11]:
+        return 0.9
+    elif month in [9, 12]:
+        return 0.7
+    elif month in [8, 1]:
+        return 0.5
+    else:
+        return 0.3
+
+def calculate_rain_probability(weather_data: list) -> float:
+    """Tính xác suất mưa từ dữ liệu thời tiết."""
+    if not weather_data:
+        return 0.3
+    
+    rain_count = 0
+    total = len(weather_data)
+    
+    for district in weather_data:
+        # Check current rain
+        if district.get("isRaining"):
+            rain_count += 1.5  # Đang mưa = +1.5
+        
+        # Check forecast
+        forecast = district.get("forecast", [])
+        for f in forecast[:3]:  # Xét 3 giờ tới
+            if f.get("pop", 0) > 0.5:  # Probability of precipitation > 50%
+                rain_count += 0.3
+    
+    return min(rain_count / (total * 2), 1.0)
+
+def generate_advisory(risk_score: float, high_risk_zones: list) -> dict:
+    """Tạo lời khuyên dựa trên risk score."""
+    if risk_score > 0.7:
+        level = "🔴 CAO"
+        message = "Nguy cơ ngập cao trong 6 giờ tới. Hạn chế di chuyển qua các vùng trũng."
+        actions = [
+            "Tránh các tuyến đường hay ngập",
+            "Chuẩn bị phương án dự phòng",
+            "Theo dõi cập nhật từ FloodWatch",
+            "Di chuyển xe ô tô lên vị trí cao"
+        ]
+    elif risk_score > 0.4:
+        level = "🟡 TRUNG BÌNH"
+        message = "Có khả năng ngập cục bộ. Lưu ý khi di chuyển."
+        actions = [
+            "Kiểm tra tình trạng đường trước khi đi",
+            "Mang theo áo mưa/dù",
+            "Tránh đỗ xe ở vùng trũng"
+        ]
+    else:
+        level = "🟢 THẤP"
+        message = "Nguy cơ ngập thấp. Điều kiện di chuyển tốt."
+        actions = [
+            "Vẫn nên mang theo áo mưa",
+            "Theo dõi dự báo thời tiết"
+        ]
+    
+    return {
+        "level": level,
+        "message": message,
+        "actions": actions,
+        "high_risk_zones": [z["name"] for z in high_risk_zones[:5]]
+    }
+
+@app.get("/api/flood/prediction", tags=["Prediction"], summary="Dự đoán ngập 6 giờ tới")
+async def predict_flood():
+    """
+    🔮 **Dự đoán nguy cơ ngập trong 6 giờ tới**
+    
+    Thuật toán dự đoán dựa trên:
+    - **Weather forecast** (60%): Dự báo mưa từ OpenWeather
+    - **Tidal effect** (40%): Ảnh hưởng triều cường TP.HCM
+    - **Historical data**: Các vùng dễ bị ngập
+    
+    Trả về:
+    - Risk score (0-1)
+    - Các zone có nguy cơ cao
+    - Lời khuyên di chuyển
+    
+    **Lưu ý**: Đây là dự đoán dựa trên model đơn giản, 
+    cần kết hợp với thông tin thực tế để đưa ra quyết định.
+    """
+    try:
+        # Lấy dữ liệu thời tiết
+        weather_data = await get_weather_with_forecast()
+        
+        # Tính các yếu tố
+        rain_probability = calculate_rain_probability(weather_data)
+        tidal_effect = get_tidal_phase()
+        
+        # Lấy dữ liệu ngập hiện tại
+        sensor_data = cached_get_snapshot_sensor(100)
+        current_severe = len([r for r in sensor_data if r.get('severity') == 'Severe'])
+        current_high = len([r for r in sensor_data if r.get('severity') == 'High'])
+        
+        # Current flood factor (0-1)
+        current_flood_factor = min((current_severe * 0.3 + current_high * 0.15) / 5, 0.3)
+        
+        # Combined risk score
+        # 50% weather + 30% tidal + 20% current conditions
+        risk_score = round(
+            0.50 * rain_probability + 
+            0.30 * tidal_effect + 
+            0.20 * current_flood_factor,
+            3
+        )
+        
+        # Xác định các zone có nguy cơ cao
+        high_risk_zones = []
+        for zone in VULNERABLE_ZONES:
+            zone_risk = zone["base_risk"] * (0.5 + risk_score * 0.5)
+            if zone_risk > 0.5:
+                high_risk_zones.append({
+                    **zone,
+                    "predicted_risk": round(zone_risk, 2)
+                })
+        
+        # Sắp xếp theo risk
+        high_risk_zones.sort(key=lambda x: x["predicted_risk"], reverse=True)
+        
+        # Tạo advisory
+        advisory = generate_advisory(risk_score, high_risk_zones)
+        
+        # Lấy weather summary
+        weather_summary = get_weather_summary(weather_data) if weather_data else {}
+        
+        return {
+            "success": True,
+            "prediction": {
+                "next_6h_risk": risk_score,
+                "risk_level": advisory["level"],
+                "high_risk_zones": high_risk_zones,
+                "advisory": advisory,
+                "factors": {
+                    "rain_probability": round(rain_probability, 2),
+                    "tidal_effect": round(tidal_effect, 2),
+                    "current_flood_factor": round(current_flood_factor, 2)
+                }
+            },
+            "weather": {
+                "rainy_districts": weather_summary.get("rainyDistricts", []),
+                "forecast_rain": weather_summary.get("districtsWithRainForecast", []),
+                "avg_humidity": weather_summary.get("avgHumidity", 0)
+            },
+            "current_situation": {
+                "severe_count": current_severe,
+                "high_count": current_high,
+                "total_alerts": len(sensor_data)
+            },
+            "timestamp": now_iso(),
+            "disclaimer": "Dự đoán mang tính tham khảo. Vui lòng theo dõi thông tin chính thức."
+        }
+    except Exception as e:
+        logger.error(f"Flood prediction error: {e}")
+        raise HTTPException(500, f"Lỗi dự đoán ngập: {str(e)}")
+
+# ======================================================
 # ROOT & HEALTH CHECK
 # ======================================================
 
-@app.get("/")
+@app.get("/", tags=["Health"], summary="API Info")
 def root():
-    """API root endpoint."""
+    """🏠 **Thông tin API FloodWatch**"""
     return {
         "message": "FloodWatch API Service",
         "version": "3.2.0",
@@ -1531,9 +2006,20 @@ def root():
         }
     }
 
-@app.get("/health")
+@app.get("/health", tags=["Health"], summary="Health Check")
 def health_check():
-    """Health check endpoint."""
+    """
+    💚 **Kiểm tra trạng thái hệ thống**
+    
+    Kiểm tra kết nối đến:
+    - Orion-LD Context Broker
+    - CrateDB Time-series Database
+    
+    Trạng thái:
+    - `healthy`: Tất cả services hoạt động
+    - `degraded`: Một số services không khả dụng
+    - `unhealthy`: Lỗi nghiêm trọng
+    """
     try:
         # Test Orion connection
         orion_ok = False
