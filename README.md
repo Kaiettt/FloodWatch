@@ -302,6 +302,49 @@ FloodWatch/
 
 ---
 
+## 🛠️ Build from Source
+
+1) Clone repo  
+```bash
+git clone https://github.com/your-repo/FloodWatch.git
+cd FloodWatch
+```
+2) Khởi chạy FIWARE stack  
+```bash
+docker-compose up -d
+```
+3) Backend (FastAPI)  
+```bash
+cd simulation/processor-backend/backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
+4) Simulators (tùy chọn)  
+```bash
+cd ../../..
+python simulation/run_all_simulators.py
+```
+5) Frontend (nếu cần phát triển)  
+```bash
+cd client
+npm install
+npm run dev
+```
+
+---
+
+## ⚡ Quick Demo (docker-compose)
+
+```bash
+docker-compose up -d        # Orion-LD, CrateDB, QuantumLeap, Redis, API, subscriptions, simulators
+```
+- Backend API: http://localhost:8000  
+- Swagger: http://localhost:8000/docs  
+- CrateDB: http://localhost:4200  
+- Frontend (nếu chạy): http://localhost:5173  
+
+---
+
 ## 🤝 Contributing
 
 1. Fork the repository
