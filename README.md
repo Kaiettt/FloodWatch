@@ -288,6 +288,20 @@ FloodWatch/
 
 ---
 
+## 🐞 Bug Tracking
+
+- Sử dụng GitHub Issues để ghi nhận và theo dõi lỗi/feature request.
+- Khi báo lỗi, vui lòng đính kèm log, bước tái hiện, môi trường (OS, version).
+
+---
+
+## 🚢 Releases
+
+- Bản phát hành đầu tiên: `v3.2.0` (2025-12-09) – phục vụ nộp bài thi, kèm docker-compose và mô phỏng.
+- Lịch sử thay đổi chi tiết trong `CHANGELOG.md`.
+
+---
+
 ## 🤝 Contributing
 
 1. Fork the repository
