@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # ======================================================
 
-OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "4cfeed8e0b19a6b8886060e9d27bfa82")
+OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "")
 OPENWEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5"
 
 # Cache thời tiết 10 phút (OpenWeather free tier limit)
