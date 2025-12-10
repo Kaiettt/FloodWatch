@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # ======================================================
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyCpgCLNU_Z_PQQRdJ2gBaS4jutdW5YwY_8")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1"  # v1beta API
 GEMINI_MODEL = "gemini-2.5-flash"  # Stable and fast model
 
