@@ -2026,10 +2026,12 @@ def health_check():
         # Test Orion connection
         orion_ok = False
         try:
-            response = requests.get(f"{ORION_LD_URL}?limit=1", timeout=5)
+            # Orion-LD 400 nếu query quá rộng, nên dùng /version để kiểm tra up/down
+            orion_health_url = ORION_LD_URL.split("/ngsi-ld")[0] + "/version"
+            response = requests.get(orion_health_url, timeout=5)
             orion_ok = response.ok
-        except:
-            pass
+        except Exception as e:
+            logger.warning(f"Orion health check failed: {e}")
         
         # Test CrateDB connection
         cratedb_ok = False
